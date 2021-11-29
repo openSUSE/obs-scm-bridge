@@ -1,0 +1,11 @@
+<service name="set_version">
+  <summary>git special service</summary>
+  <description></description>
+  <parameter name="url">
+    <description>URL to git repository</description>
+  </parameter>
+  <parameter name="revision">
+    <description>commit, branch or tag</description>
+  </parameter>
+</service>
+
