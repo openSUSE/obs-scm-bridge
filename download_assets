@@ -36,15 +36,14 @@ use Cwd ();
 
 use Build;
 
-use PBuild::Download;
-use PBuild::RemoteAssets;
+use PBuild::AssetMgr;
 use PBuild::Source;
-use PBuild::Util;
 
 # FIXME: all code should become arch agnostic
 my $arch = 'noarch';
 my $global_asset_dir;
 
+my $bconf = Build::read_config($arch);
 for my $dir (@ARGV) {
   my ($files, $asset_files) = PBuild::Source::list_package($dir);
   my @assets;
@@ -57,36 +56,19 @@ for my $dir (@ARGV) {
   };
   $p->{'asset_files'} = $asset_files if %{$asset_files || {}};
  
-  # spec takes also care of kiwi type
-  # no support for fedpkg yet
-  for my $type ('spec', 'arch') { 
-    PBuild::Recipe::parse(undef, $p, $type, $arch, undef, undef);
+  my $assetmgr = PBuild::AssetMgr::create($assetdir);
 
-    push @assets, PBuild::RemoteAssets::fedpkg_parse($p) if $type eq 'fedpkg';
-    push @assets, PBuild::RemoteAssets::archlinux_parse($p, $arch) if $type eq 'arch';
-    push @assets, PBuild::RemoteAssets::recipe_parse($p) if $type eq 'spec';
+  for my $file (sort keys %$files) {
+    next unless $file eq 'PKGBUILD' || $file =~ /\.(?:spec|dsc|kiwi)/;
+    my $bt = Build::recipe2buildtype($file);
+    next unless $bt;
+    $p->{'buildtype'} = $bt;
+    my $d;
+    eval { $d = Build::parse_typed($bconf, "$dir/$file", $bt) };
+    $p->{'remoteassets'} = $d->{'remoteassets'} if $d && $d->{'remoteassets'};
+    $assetmgr->find_assets($p, $arch);
   }
-
-  for my $asset (@assets) {
-    $asset->{'assetid'} = PBuild::AssetMgr::get_assetid($asset->{'file'}, $asset);
-    $p->{'asset_files'}->{$asset->{'file'}} = $asset;
-    print Dumper($asset);
-  }
-
-  # download missing assets
-  if (grep {($_->{'type'} || '') eq 'ipfs'} @assets) {
-    PBuild::RemoteAssets::ipfs_fetch($p, $assetdir, \@assets);
-  }
-  if (grep {($_->{'type'} || '') eq 'url'} @assets) {
-    PBuild::RemoteAssets::url_fetch($p, $assetdir, \@assets);
-  }
-
-  $asset_files = $p->{'asset_files'};
-  for my $file (sort keys %{$asset_files || {}}) {
-    my $asset = $asset_files->{$file};
-    my $assetid = $asset->{'assetid'};
-    my $adir = "$assetdir/".substr($assetid, 0, 2);
-    PBuild::Util::cp("$adir/$assetid", $asset->{'isdir'} ? "$dir/$file.obscpio" : "$dir/$file");
-  }
+  $assetmgr->getremoteassets($p);
+  $assetmgr->copy_assets($p, $dir);
 }
 
