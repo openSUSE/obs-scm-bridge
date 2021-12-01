@@ -57,7 +57,7 @@ class ObsGit(object):
             stdout = archivefile
         )
 
-        for root, dirs, files in os.walk(self.outdir, topdown=False):
+        for root, dirs, files in os.walk(directory, topdown=False):
             for name in dirs:
                 proc.stdin.write(os.path.join(root, name).encode('UTF-8', 'surrogateescape'))
                 proc.stdin.write(b"\n")
@@ -78,10 +78,9 @@ class ObsGit(object):
         listing = os.listdir(".")
         for name in listing:
             if name == '.git':
-                if os.environ.get('OBS_SERVICE_DAEMON'):
-                    # we do not store git meta data service side atm to avoid bloat storage
-                    # however, this will break some builds, so we will need an opt-out in future
-                    shutil.rmtree(name)
+                # we do not store git meta data service side atm to avoid bloat storage
+                # however, this will break some builds, so we will need an opt-out in future
+                shutil.rmtree(name)
                 continue
             if name[0:1] == '.':
                 # no dot directories by default
@@ -131,6 +130,6 @@ if __name__ == '__main__':
     obsgit = ObsGit(outdir, url)
     obsgit.clone()
     obsgit.get_assets()
-    if os.environ.get('OSC_VERSION') == None:
+    if os.environ.get('OBS_SERVICE_DAEMON'):
         obsgit.cpio_directories()
 
