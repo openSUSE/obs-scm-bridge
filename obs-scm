@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# git cloning and packaging for Open Build Service
+# scm (only git atm) cloning and packaging for Open Build Service
 # 
 # (C) 2021 by Adrian Schröter <adrian@suse.de>
 #

@@ -7,9 +7,8 @@ all:
 
 install:
 	install -d $(DESTDIR)$(serverdir)
-	install -m 0755 download_assets obs-git $(DESTDIR)$(serverdir)
+	install -m 0755 download_assets obs-scm $(DESTDIR)$(serverdir)
 	install -m 0644 helpers.py $(DESTDIR)$(serverdir)
-#	install -m 0644 obs-git.service $(DESTDIR)$(serverdir)
 
 test:
 	flake8 set_version tests/

@@ -1,9 +1,11 @@
 
-Native OBS Git support helper
+Native OBS SCM support helper
 =============================
 
-Native OBS git is using git repositories for the packaging files. This is replacing any source handling
+Native OBS scm support for the build recipies and additional files. This is replacing any source handling
 operation with OBS directly. Any source change must be provided via the git repository in this scenario.
+
+Only git is supported atm, but this can be extended later.
 
 It is not recommended to put large binary files into git as this won't scale. Use the
 asset support instead, which is described in pbuild documentation:
@@ -15,7 +17,7 @@ These assets will be downloaded by osc and OBS. The verification via sha256 sum 
 HOWTO
 =====
 
-The current temporary way to define a git repository inside of an OBS package is to mis-used the description
+The current temporary way to define a git repository inside of an OBS package is to mis-used the title
 element inside of the package meta. Set it to
 
 GIT:<public_git_url>
