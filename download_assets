@@ -59,6 +59,11 @@ for my $dir (@ARGV) {
   my $assetmgr = PBuild::AssetMgr::create($assetdir);
 
   for my $file (sort keys %$files) {
+    if ($file eq 'sources') {
+      $p->{'buildtype'} = '';
+      $assetmgr->find_assets($p, $arch);
+      next;
+    }
     next unless $file eq 'PKGBUILD' || $file =~ /\.(?:spec|dsc|kiwi)/;
     my $bt = Build::recipe2buildtype($file);
     next unless $bt;
