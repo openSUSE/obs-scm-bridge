@@ -76,6 +76,7 @@ for my $dir (@ARGV) {
     my $d;
     eval { $d = Build::parse_typed($bconf, "$dir/$file", $bt) };
     $p->{'remoteassets'} = $d->{'remoteassets'} if $d && $d->{'remoteassets'};
+    $p->{'name'} ||= $d->{'name'} if $d->{'name'};
     $assetmgr->find_assets($p, $arch);
   }
   $assetmgr->getremoteassets($p);
