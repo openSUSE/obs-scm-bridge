@@ -43,6 +43,10 @@ use PBuild::Source;
 my $arch = 'noarch';
 my $global_asset_dir;
 
+my @assetsurls = (
+  'fedpkg@https://pkgs.fedoraproject.org/repo/pkgs',
+);
+
 my $bconf = Build::read_config($arch);
 for my $dir (@ARGV) {
   my ($files, $asset_files) = PBuild::Source::list_package($dir);
@@ -57,6 +61,7 @@ for my $dir (@ARGV) {
   $p->{'asset_files'} = $asset_files if %{$asset_files || {}};
  
   my $assetmgr = PBuild::AssetMgr::create($assetdir);
+  $assetmgr->add_assetshandler($_) for @assetsurls;
 
   for my $file (sort keys %$files) {
     if ($file eq 'sources') {
