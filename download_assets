@@ -44,7 +44,7 @@ my $arch = 'noarch';
 my $global_asset_dir;
 
 my @assetsurls = (
-  'fedpkg@https://pkgs.fedoraproject.org/repo/pkgs',
+#  'fedpkg@https://pkgs.fedoraproject.org/repo/pkgs',
 );
 
 my $bconf = Build::read_config($arch);
