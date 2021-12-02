@@ -21,12 +21,12 @@
 %define build_pkg_name build
 %endif
 
-Name:           obs_scm_bridge
+Name:           obs-scm-bridge
 Version:        0.0.1
 Release:        0
 Summary:        A help service to work with git repositories in OBS
 License:        GPL-2.0-or-later
-URL:            https://github.com/openSUSE/obs_scm_bridge
+URL:            https://github.com/openSUSE/obs-scm-bridge
 Source0:        %{name}-%{version}.tar.xz
 Requires:       %{build_pkg_name} >= 20211125
 BuildArch:      noarch
