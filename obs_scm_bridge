@@ -91,7 +91,7 @@ class ObsGit(object):
                 shutil.rmtree(name)
 
     def get_assets(self):
-        clone = [ '/usr/lib/obs/server/download_assets', self.outdir ]
+        clone = [ '/usr/lib/obs/service/download_assets', self.outdir ]
         self.helpers.run_cmd(clone, None)
 
 if __name__ == '__main__':
