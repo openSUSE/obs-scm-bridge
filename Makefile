@@ -1,14 +1,14 @@
 prefix = /usr
 PYTHON ?= python
 
-serverdir = ${prefix}/lib/obs/server
+servicedir = ${prefix}/lib/obs/service
 
 all:
 
 install:
-	install -d $(DESTDIR)$(serverdir)
-	install -m 0755 download_assets obs_scm_bridge $(DESTDIR)$(serverdir)
-	install -m 0644 helpers.py $(DESTDIR)$(serverdir)
+	install -d $(DESTDIR)$(servicedir)
+	install -m 0755 download_assets obs_scm_bridge $(DESTDIR)$(servicedir)
+	install -m 0644 helpers.py $(DESTDIR)$(servicedir)
 
 test:
 	flake8 set_version tests/

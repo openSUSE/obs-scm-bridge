@@ -44,6 +44,6 @@ Recommends:     python3-packaging
 make DESTDIR=%{buildroot} install
 
 %files
-%{_prefix}/lib/obs/server
+%{_prefix}/lib/obs/service
 
 %changelog
