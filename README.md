@@ -1,13 +1,14 @@
 
-Native OBS SCM support helper
-=============================
+Native OBS SCM bridge helper
+============================
 
-Native OBS scm support for the build recipies and additional files. This is replacing any source handling
-operation with OBS directly. Any source change must be provided via the git repository in this scenario.
+Native OBS scm support for the build recipies and additional files. This is bridging an external authorative
+scm repository into OBS. Any source change or merge workflow must be provided via the scm repository 
+hoster in this scenario.
 
-Only git is supported atm, but this can be extended later.
+Only git is supported atm, but this can be extended later to further systems.
 
-It is not recommended to put large binary files into git as this won't scale. Use the
+It is not recommended to put large binary files into git directly as this won't scale. Use the
 asset support instead, which is described in pbuild documentation:
 
   http://opensuse.github.io/obs-build/pbuild.html#_remote_assets
