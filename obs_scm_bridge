@@ -11,8 +11,6 @@
 # of the License, or (at your option) any later version.
 # See http://www.gnu.org/licenses/gpl-2.0.html for full license text.
 
-from __future__ import print_function
-
 import argparse
 import glob
 import os

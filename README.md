@@ -40,11 +40,19 @@ TODO
 
  * Clean integration via a proper meta data defintion.
 
+ * Monitoring changes in referenced repository. (can currently be workarounded
+   via "osc service rr")
+
  * Project level support: Packages are defined via a gitlab/github project.
+   Just creating a git repository there creates a new package in OBS.
 
  * osc upstream integration
+
+ * signature validation
 
  * find a better way to store files in .osc and .assets of the checkout, as
    they do not belong to the git repository
     auto extending .gitignore? (esp. when downloading asset files?)
+
+ * make cpio generation bit identical (avoid mtime from clone)
 
