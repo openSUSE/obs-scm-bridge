@@ -12,18 +12,11 @@
 # See http://www.gnu.org/licenses/gpl-2.0.html for full license text.
 
 import argparse
-import glob
 import os
-import re
 import shutil
 import sys
-import tarfile
-import codecs
 import logging
 import subprocess
-
-# copied from obs_scm for now
-from helpers import Helpers
 
 if os.environ.get('DEBUG_SET_VERSION') == "1":
     logging.getLogger().setLevel(logging.DEBUG)
@@ -36,12 +29,27 @@ class ObsGit(object):
         self.outdir   = outdir
         self.url      = url
         self.revision = revision
-        self.helpers        = Helpers()
+
+    def run_cmd(self, cmd, cwd=None):
+        logging.debug("COMMAND: %s" % cmd)
+        proc = subprocess.Popen(cmd,
+                                shell=False,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,
+                                cwd=cwd)
+        output = proc.communicate()[0]
+        if isinstance(output, bytes):
+            output = output.decode('UTF-8')
+        logging.debug("RESULT(%d): %s", proc.returncode, repr(output))
+        return (proc.returncode, output)
 
     def clone(self):
         clone = [ 'git', 'clone', self.url, self.outdir ]
         os.environ['LANG'] = "C"
-        self.helpers.run_cmd(clone, None)
+        rcode, output = self.run_cmd(clone)
+        if rcode != 0:
+            print("ERROR: git clone failed: ", output)
+            sys.exit(rcode)
 
     def cpio_directory(self, directory):
         cmd = [ 'cpio', '--create', '--format=newc', '--owner', ':0', '--reproducible' ]
@@ -65,8 +73,8 @@ class ObsGit(object):
                 proc.stdin.write(b"\n")
 
         proc.stdin.close()
-        ret_code = proc.wait()
-        if ret_code != 0:
+        rcode = proc.wait()
+        if rcode != 0:
             raise SystemExit("Creating the cpio archive failed!")
         archivefile.close()
 
@@ -90,7 +98,8 @@ class ObsGit(object):
 
     def get_assets(self):
         clone = [ '/usr/lib/obs/service/download_assets', self.outdir ]
-        rcode, output = self.helpers.run_cmd(clone, None)
+        clone = [ '/home/obs-scm-bridge/download_assets', self.outdir ]
+        rcode, output = self.run_cmd(clone)
         if rcode != 0:
             print("ERROR: asset download failed: ", output)
             sys.exit(rcode)
