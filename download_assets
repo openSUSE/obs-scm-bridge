@@ -39,6 +39,7 @@ use Build;
 use PBuild::AssetMgr;
 use PBuild::Source;
 use PBuild::Options;
+use PBuild::Cpio;
 
 # FIXME: all code should become arch agnostic
 my $arch = 'noarch';
@@ -48,9 +49,23 @@ my %known_options = (
   'help' => '',
   'assetdir' => ':',
   'assets' => '::',
+  'create-cpio' => '',
 );
 
 my ($opts, @dirs) = PBuild::Options::parse_options(\%known_options, @ARGV);
+
+if ($opts->{'create-cpio'}) {
+  if ($opts->{'help'}) {
+    print "Usage: download_assets --create-cpio dir\n";
+    exit(0);
+  }
+  die("Please specify one directory\n") unless @dirs == 1;
+  my $prefix = $dirs[0];
+  $prefix =~ s/.*\///;
+  $prefix = '' if $prefix eq '.';
+  PBuild::Cpio::cpio_create(\*STDOUT, $dirs[0], 'prefix' => ($prefix ne '' ? "$prefix/" : ''));
+  exit(0);
+}
 
 if ($opts->{'help'}) {
   print "Usage: download_assets [--assetdir dir] dir...\n";
