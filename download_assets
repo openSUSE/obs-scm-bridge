@@ -38,18 +38,31 @@ use Build;
 
 use PBuild::AssetMgr;
 use PBuild::Source;
+use PBuild::Options;
 
 # FIXME: all code should become arch agnostic
 my $arch = 'noarch';
-my $global_asset_dir;
-
 my $fedpkg = 'fedpkg@https://pkgs.fedoraproject.org/repo/pkgs';
 
+my %known_options = (
+  'help' => '',
+  'assetdir' => ':',
+  'assets' => '::',
+);
+
+my ($opts, @dirs) = PBuild::Options::parse_options(\%known_options, @ARGV);
+
+if ($opts->{'help'}) {
+  print "Usage: download_assets [--assetdir dir] dir...\n";
+  exit(0);
+}
+die("Please specify at least one directory\n") unless @dirs;
+
 my $bconf = Build::read_config($arch);
-for my $dir (@ARGV) {
+for my $dir (@dirs) {
   my ($files, $asset_files) = PBuild::Source::list_package($dir);
   my @assets;
-  my $assetdir = $global_asset_dir || "$dir/.assets";
+  my $assetdir = $opts->{'assetdir'} || "$dir/.assets";
   my $p = {
     'pkg' => "_me",
     'dir' => $dir,
@@ -59,7 +72,8 @@ for my $dir (@ARGV) {
   $p->{'asset_files'} = $asset_files if %{$asset_files || {}};
  
   my $assetmgr = PBuild::AssetMgr::create($assetdir);
-  $assetmgr->add_assetshandler($fedpkg) if $files->{'sources'};
+  $assetmgr->add_assetshandler($_) for @{$opts->{'assets'} || []};
+  $assetmgr->add_assetshandler($fedpkg) if !$opts->{'assets'} && $files->{'sources'};
 
   for my $file (sort keys %$files) {
     if ($file eq 'sources') {
