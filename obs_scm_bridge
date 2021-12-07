@@ -98,7 +98,6 @@ class ObsGit(object):
 
     def get_assets(self):
         clone = [ '/usr/lib/obs/service/download_assets', self.outdir ]
-        clone = [ '/home/obs-scm-bridge/download_assets', self.outdir ]
         rcode, output = self.run_cmd(clone)
         if rcode != 0:
             print("ERROR: asset download failed: ", output)
