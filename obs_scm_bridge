@@ -18,11 +18,14 @@ import sys
 import logging
 import subprocess
 
+outdir = None
+download_assets = '/usr/lib/build/download_assets'
+pack_directories = False
+
 if os.environ.get('DEBUG_SET_VERSION') == "1":
     logging.getLogger().setLevel(logging.DEBUG)
-
-outdir = None
-
+if os.environ.get('OBS_SERVICE_DAEMON'):
+    pack_directories = True
 
 class ObsGit(object):
     def __init__(self, outdir, url, revision=None):
@@ -30,52 +33,35 @@ class ObsGit(object):
         self.url      = url
         self.revision = revision
 
-    def run_cmd(self, cmd, cwd=None):
+    def run_cmd(self, cmd, cwd=None, stdout=subprocess.PIPE, fatal=None):
         logging.debug("COMMAND: %s" % cmd)
+        stderr = subprocess.PIPE
+        if stdout == subprocess.PIPE:
+            stderr = subprocess.STDOUT
         proc = subprocess.Popen(cmd,
                                 shell=False,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT,
+                                stdout=stdout,
+                                stderr=stderr,
                                 cwd=cwd)
         output = proc.communicate()[0]
         if isinstance(output, bytes):
             output = output.decode('UTF-8')
         logging.debug("RESULT(%d): %s", proc.returncode, repr(output))
+        if fatal and proc.returncode != 0:
+            print("ERROR: " + fatal + " failed: ", output)
+            sys.exit(proc.returncode)
         return (proc.returncode, output)
 
     def clone(self):
-        clone = [ 'git', 'clone', self.url, self.outdir ]
+        cmd = [ 'git', 'clone', self.url, self.outdir ]
         os.environ['LANG'] = "C"
-        rcode, output = self.run_cmd(clone)
-        if rcode != 0:
-            print("ERROR: git clone failed: ", output)
-            sys.exit(rcode)
+        self.run_cmd(cmd, fatal="git clone")
 
     def cpio_directory(self, directory):
-        cmd = [ 'cpio', '--create', '--format=newc', '--owner', ':0', '--reproducible' ]
         logging.info("create archivefile for %s", directory)
+        cmd = [ download_assets, '--create-cpio', '--', directory ]
         archivefile = open(directory + '.obscpio', 'w')
-
-        proc = subprocess.Popen(
-            cmd,
-            shell  = False,
-            stdin  = subprocess.PIPE,
-            stdout = archivefile
-        )
-
-        for root, dirs, files in os.walk(directory, topdown=False):
-            for name in dirs:
-                proc.stdin.write(os.path.join(root, name).encode('UTF-8', 'surrogateescape'))
-                proc.stdin.write(b"\n")
-
-            for name in files:
-                proc.stdin.write(os.path.join(root, name).encode('UTF-8', 'surrogateescape'))
-                proc.stdin.write(b"\n")
-
-        proc.stdin.close()
-        rcode = proc.wait()
-        if rcode != 0:
-            raise SystemExit("Creating the cpio archive failed!")
+        self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
         archivefile.close()
 
     def cpio_directories(self):
@@ -97,11 +83,9 @@ class ObsGit(object):
                 shutil.rmtree(name)
 
     def get_assets(self):
-        clone = [ '/usr/lib/obs/service/download_assets', self.outdir ]
-        rcode, output = self.run_cmd(clone)
-        if rcode != 0:
-            print("ERROR: asset download failed: ", output)
-            sys.exit(rcode)
+        logging.info("downloading assets")
+        cmd = [ download_assets, '--', self.outdir ]
+        self.run_cmd(cmd, fatal="asset download")
 
 if __name__ == '__main__':
 
@@ -122,7 +106,6 @@ if __name__ == '__main__':
     outdir = args['outdir']
     revision = args['revision']
 
-
     if not outdir:
         print("no outdir specified")
         sys.exit(-1)
@@ -139,6 +122,6 @@ if __name__ == '__main__':
     obsgit = ObsGit(outdir, url)
     obsgit.clone()
     obsgit.get_assets()
-    if os.environ.get('OBS_SERVICE_DAEMON'):
+    if pack_directories:
         obsgit.cpio_directories()
 
