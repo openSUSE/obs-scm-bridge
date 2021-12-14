@@ -20,6 +20,7 @@ import subprocess
 
 outdir = None
 download_assets = '/usr/lib/build/download_assets'
+export_debian_orig_from_git = '/usr/lib/build/export_debian_orig_from_git'
 pack_directories = False
 
 if os.environ.get('DEBUG_SET_VERSION') == "1":
@@ -87,6 +88,25 @@ class ObsGit(object):
         cmd = [ download_assets, '--', self.outdir ]
         self.run_cmd(cmd, fatal="asset download")
 
+    def copyfile(self, src, dst):
+        cmd = [ 'cp', '-af', self.outdir + "/" + src, self.outdir + "/" + dst ]
+        self.run_cmd(cmd, fatal="file copy")
+
+    def export_debian_files(self):
+        if os.path.isfile(self.outdir + "/debian/control") and \
+                not os.path.isfile(self.outdir + "/debian.control"):
+            self.copyfile("debian/control", "debian.control")
+        if os.path.isfile(self.outdir + "/debian/changelog") and \
+                not os.path.isfile(self.outdir + "/debian.changelog"):
+            self.copyfile("debian/changelog", "debian.changelog")
+
+    def get_debian_origtar(self):
+        cmd = [ export_debian_orig_from_git, self.outdir ]
+        if os.path.isfile(self.outdir + "/debian/control"):
+            logging.info("exporting debian origtar")
+            self.run_cmd(cmd, fatal="debian origtar export")
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(
@@ -122,6 +142,8 @@ if __name__ == '__main__':
     obsgit = ObsGit(outdir, url)
     obsgit.clone()
     obsgit.get_assets()
+    obsgit.get_debian_origtar()
     if pack_directories:
+        obsgit.export_debian_files()
         obsgit.cpio_directories()
 
