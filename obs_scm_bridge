@@ -65,10 +65,20 @@ class ObsGit(object):
         self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
         archivefile.close()
 
+    def cpio_specials(self, specials):
+        if not specials:
+            return
+        logging.info("create archivefile for specials")
+        cmd = [ download_assets, '--create-cpio', '--', '.' ] + specials
+        archivefile = open('build.specials.obscpio', 'w')
+        self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
+        archivefile.close()
+
     def cpio_directories(self):
         logging.debug("walk via %s", self.outdir)
         os.chdir(self.outdir)
-        listing = os.listdir(".")
+        listing = sorted(os.listdir("."))
+        specials = []
         for name in listing:
             if name == '.git':
                 # we do not store git meta data service side atm to avoid bloat storage
@@ -76,12 +86,22 @@ class ObsGit(object):
                 shutil.rmtree(name)
                 continue
             if name[0:1] == '.':
-                # no dot directories by default
+                specials.append(name)
+                continue
+            if os.path.islink(name):
+                specials.append(name)
                 continue
             if os.path.isdir(name):
                 logging.info("CPIO %s ", name)
                 self.cpio_directory(name)
                 shutil.rmtree(name)
+        if specials:
+            self.cpio_specials(specials)
+            for name in specials:
+                if os.path.isdir(name):
+                    shutil.rmtree(name)
+                else:
+                    os.unlink(name)
 
     def get_assets(self):
         logging.info("downloading assets")
