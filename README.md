@@ -18,10 +18,12 @@ These assets will be downloaded by osc and OBS. The verification via sha256 sum 
 HOWTO
 =====
 
-The current temporary way to define a git repository inside of an OBS package is to mis-use the title
-element inside of the package meta. Set it to
+The current way to define a git repository for an OBS package is using the `scmsync`
+element inside the package meta.
 
-obs-scm:<public_git_url>
+```
+<scmsync>https://github.com/foo/bar</scmsync>
+```
 
 For doing a local checkout use the currently experimental osc from
 
