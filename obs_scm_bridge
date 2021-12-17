@@ -18,6 +18,8 @@ import shutil
 import sys
 import logging
 import subprocess
+import tempfile
+import urllib.parse
 
 outdir = None
 download_assets = '/usr/lib/build/download_assets'
@@ -32,8 +34,14 @@ if os.environ.get('OBS_SERVICE_DAEMON'):
 class ObsGit(object):
     def __init__(self, outdir, url, revision=None):
         self.outdir   = outdir
-        self.url      = url
         self.revision = revision
+        self.subdir   = ''
+        u = urllib.parse.urlparse(url)
+        query = urllib.parse.parse_qs(u.query);
+        self.url      = u.scheme + '://' + u.netloc + u.path
+        if "subdir" in query:
+            self.subdir = query['subdir'][0]
+
 
     def run_cmd(self, cmd, cwd=None, stdout=subprocess.PIPE, fatal=None):
         logging.debug("COMMAND: %s" % cmd)
@@ -55,9 +63,16 @@ class ObsGit(object):
         return (proc.returncode, output)
 
     def clone(self):
-        cmd = [ 'git', 'clone', self.url, self.outdir ]
+        clonedir = self.outdir
+        if self.subdir != '':
+            clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
+
+        cmd = [ 'git', 'clone', '--depth', '1', self.url, clonedir ]
         os.environ['LANG'] = "C"
         self.run_cmd(cmd, fatal="git clone")
+
+        if self.subdir != '':
+            shutil.move(os.path.join(clonedir, self.subdir), self.outdir)
 
     def cpio_directory(self, directory):
         logging.info("create archivefile for %s", directory)
@@ -127,7 +142,7 @@ class ObsGit(object):
             logging.info("exporting debian origtar")
             self.run_cmd(cmd, fatal="debian origtar export")
 
-    def generate_package_xml_files(self, baseurl):
+    def generate_package_xml_files(self):
         logging.debug("walk via %s", self.outdir)
         os.chdir(self.outdir)
         listing = sorted(os.listdir("."))
@@ -141,7 +156,7 @@ class ObsGit(object):
                  continue
                xmlfile = open(name + '.xml', 'w')
                xmlfile.write('<package name="' + name + '">\n')
-               xmlfile.write('  <scmsync>' + baseurl + "?subdir=" + name + '</scmsync>>\n')
+               xmlfile.write('  <scmsync>' + self.url + "?subdir=" + name + '</scmsync>>\n')
                xmlfile.write('</package>\n')
                xmlfile.close()
             else:
@@ -183,7 +198,7 @@ if __name__ == '__main__':
     obsgit = ObsGit(outdir, url)
     obsgit.clone()
     if project_mode == 'true' or project_mode == '1':
-        obsgit.generate_package_xml_files(url)
+        obsgit.generate_package_xml_files()
         sys.exit(0)
 
     obsgit.get_assets()
