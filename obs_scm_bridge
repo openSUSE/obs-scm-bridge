@@ -127,20 +127,23 @@ class ObsGit(object):
             logging.info("exporting debian origtar")
             self.run_cmd(cmd, fatal="debian origtar export")
 
-    def generate_package_xml_files(self):
+    def generate_package_xml_files(self, baseurl):
         logging.debug("walk via %s", self.outdir)
         os.chdir(self.outdir)
         listing = sorted(os.listdir("."))
-        regexp = re.compile('[^a-zA-Z0-9]')
+        regexp =  re.compile(r"^[a-zA-Z0-9\.\-\_\+]*$");
         for name in listing:
-            if not regexp.search(name):
-               logging.info("exporting debian origtar")
-               continue
+            # FIXME: add support for git submodules
             if os.path.isdir(name):
-               xmlfile = open(name + '.xml', 'w')
-               xmlfile.write('<package name="' + name + '" />\n')
-               xmlfile.close()
                shutil.rmtree(name)
+               if not regexp.match(name):
+                 logging.warn("directory name contains invalid char: " + name)
+                 continue
+               xmlfile = open(name + '.xml', 'w')
+               xmlfile.write('<package name="' + name + '">\n')
+               xmlfile.write('  <scmsync>' + baseurl + "?subdir=" + name + '</scmsync>>\n')
+               xmlfile.write('</package>\n')
+               xmlfile.close()
             else:
                if name != "_config":
                    os.unlink(name)
@@ -179,8 +182,8 @@ if __name__ == '__main__':
     # workflow
     obsgit = ObsGit(outdir, url)
     obsgit.clone()
-    if project_mode == "true" or project_mode == "1":
-        obsgit.generate_package_xml_files()
+    if project_mode == 'true' or project_mode == '1':
+        obsgit.generate_package_xml_files(url)
         sys.exit(0)
 
     obsgit.get_assets()
