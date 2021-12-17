@@ -179,7 +179,7 @@ if __name__ == '__main__':
     # workflow
     obsgit = ObsGit(outdir, url)
     obsgit.clone()
-    if project_mode == "true":
+    if project_mode == "true" or project_mode == "1":
         obsgit.generate_package_xml_files()
         sys.exit(0)
 
