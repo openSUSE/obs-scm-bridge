@@ -8,7 +8,6 @@ all:
 install:
 	install -d $(DESTDIR)$(servicedir)
 	install -m 0755 obs_scm_bridge $(DESTDIR)$(servicedir)
-	install -m 0644 helpers.py $(DESTDIR)$(servicedir)
 
 test:
 	flake8 set_version tests/
