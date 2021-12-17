@@ -13,6 +13,7 @@
 
 import argparse
 import os
+import re
 import shutil
 import sys
 import logging
@@ -126,6 +127,23 @@ class ObsGit(object):
             logging.info("exporting debian origtar")
             self.run_cmd(cmd, fatal="debian origtar export")
 
+    def generate_package_xml_files(self):
+        logging.debug("walk via %s", self.outdir)
+        os.chdir(self.outdir)
+        listing = sorted(os.listdir("."))
+        regexp = re.compile('[^a-zA-Z0-9]')
+        for name in listing:
+            if not regexp.search(name):
+               logging.info("exporting debian origtar")
+               continue
+            if os.path.isdir(name):
+               xmlfile = open(name + '.xml', 'w')
+               xmlfile.write('<package name="' + name + '" />\n')
+               xmlfile.close()
+               shutil.rmtree(name)
+            else:
+               if name != "_config":
+                   os.unlink(name)
 
 if __name__ == '__main__':
 
@@ -136,15 +154,15 @@ if __name__ == '__main__':
                         help='output directory for modified sources')
     parser.add_argument('--url',
                         help='REQUIRED: url to git repository')
-    parser.add_argument('--revision',
-                        help='commit, tag or branch to use')
+    parser.add_argument('--projectmode',
+                        help='just return the package list based on the subdirectories')
     parser.add_argument('--debug',
                         help='verbose debug mode')
     args = vars(parser.parse_args())
 
     url = args['url']
     outdir = args['outdir']
-    revision = args['revision']
+    project_mode = args['projectmode']
 
     if not outdir:
         print("no outdir specified")
@@ -161,6 +179,10 @@ if __name__ == '__main__':
     # workflow
     obsgit = ObsGit(outdir, url)
     obsgit.clone()
+    if project_mode == "true":
+        obsgit.generate_package_xml_files()
+        sys.exit(0)
+
     obsgit.get_assets()
     obsgit.get_debian_origtar()
     if pack_directories:
