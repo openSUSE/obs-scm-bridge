@@ -7,7 +7,7 @@ all:
 
 install:
 	install -d $(DESTDIR)$(servicedir)
-	install -m 0755 download_assets obs_scm_bridge $(DESTDIR)$(servicedir)
+	install -m 0755 obs_scm_bridge $(DESTDIR)$(servicedir)
 	install -m 0644 helpers.py $(DESTDIR)$(servicedir)
 
 test:
