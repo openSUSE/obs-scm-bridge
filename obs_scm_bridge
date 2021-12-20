@@ -186,10 +186,10 @@ class ObsGit(object):
     def generate_package_xml_files(self):
         logging.debug("walk via %s", self.outdir)
         os.chdir(self.outdir)
-        export_files = [ '_config' ]
+        export_files = set("_config")
 
         # find all top level git submodules
-        gitsubmodules = {}
+        gitsubmodules = set()
         if os.path.isfile('.gitmodules'):
             gsmconfig = configparser.ConfigParser()
             gsmconfig.read('.gitmodules')
@@ -220,9 +220,9 @@ class ObsGit(object):
                     sys.exit(1)
 
                 # all good, write xml file and register the module
-                gitsubmodules[path] = url
+                gitsubmodules.add(path)
                 self.write_package_xml_file(path, url + '#' + revision)
-                export_files.append(path + ".xml")
+                export_files.add(path + ".xml")
                 shutil.rmtree(path)
 
         # handle plain files and directories
@@ -233,7 +233,7 @@ class ObsGit(object):
                 shutil.rmtree(name)
                 continue
             if os.path.isdir(name):
-                if name in gitsubmodules.keys():
+                if name in gitsubmodules:
                     # already handled as git submodule
                     continue
 
