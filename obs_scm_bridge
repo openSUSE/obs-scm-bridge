@@ -27,11 +27,13 @@ outdir = None
 download_assets = '/usr/lib/build/download_assets'
 export_debian_orig_from_git = '/usr/lib/build/export_debian_orig_from_git'
 pack_directories = False
+download_assets = False
 
 if os.environ.get('DEBUG_SET_VERSION') == "1":
     logging.getLogger().setLevel(logging.DEBUG)
 if os.environ.get('OBS_SERVICE_DAEMON'):
     pack_directories = True
+    download_assets = True
 os.environ['LANG'] = "C"
 
 class ObsGit(object):
@@ -289,7 +291,9 @@ if __name__ == '__main__':
         obsgit.generate_package_xml_files()
         sys.exit(0)
 
-    obsgit.get_assets()
+    if download_assets:
+        obsgit.get_assets()
+
     obsgit.get_debian_origtar()
     if pack_directories:
         obsgit.export_debian_files()
