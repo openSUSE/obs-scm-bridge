@@ -31,6 +31,7 @@ if os.environ.get('DEBUG_SET_VERSION') == "1":
     logging.getLogger().setLevel(logging.DEBUG)
 if os.environ.get('OBS_SERVICE_DAEMON'):
     pack_directories = True
+os.environ['LANG'] = "C"
 
 class ObsGit(object):
     def __init__(self, outdir, url, revision=None):
@@ -64,15 +65,19 @@ class ObsGit(object):
 
     def clone(self):
         clonedir = self.outdir
-        if self.subdir != '':
+        if self.subdir:
             clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
 
         cmd = [ 'git', 'clone', '--depth', '1', urllib.parse.urlunparse(self.url), clonedir ]
-        os.environ['LANG'] = "C"
         self.run_cmd(cmd, fatal="git clone")
 
-        if self.subdir != '':
-            shutil.move(os.path.join(clonedir, self.subdir), self.outdir)
+        if self.subdir:
+            fromdir = os.path.join(clonedir, self.subdir)
+            if not os.path.isdir(self.outdir):
+                os.makedirs(self.outdir)
+            for name in os.listdir(fromdir):
+                shutil.move(os.path.join(fromdir, name), self.outdir)
+            shutil.rmtree(clonedir)
 
     def cpio_directory(self, directory):
         logging.info("create archivefile for %s", directory)
@@ -121,7 +126,10 @@ class ObsGit(object):
 
     def get_assets(self):
         logging.info("downloading assets")
-        cmd = [ download_assets, '--', self.outdir ]
+        if pack_directories:
+            cmd = [ download_assets, '--', self.outdir ]
+        else:
+            cmd = [ download_assets, '--unpack', '--noassetdir', '--', self.outdir ]
         self.run_cmd(cmd, fatal="asset download")
 
     def copyfile(self, src, dst):
