@@ -38,14 +38,12 @@ class ObsGit(object):
         self.outdir   = outdir
         self.revision = revision
         self.subdir   = ''
-        self.url = urllib.parse.urlparse(url)
-        query = urllib.parse.parse_qs(self.url.query);
+        self.url = list(urllib.parse.urlparse(url))
+        query = urllib.parse.parse_qs(self.url[4]);
         if "subdir" in query:
             self.subdir = query['subdir'][0]
             del query['subdir']
-            url_parts = list(self.url)
-            url_parts[4] = urllib.parse.urlencode(query)
-            self.url = url_parts
+            self.url[4] = urllib.parse.urlencode(query)
 
     def run_cmd(self, cmd, cwd=None, stdout=subprocess.PIPE, fatal=None):
         logging.debug("COMMAND: %s" % cmd)
@@ -169,14 +167,14 @@ class ObsGit(object):
                  continue
 
                # add subdir parameter to url
-               url_parts = list(self.url)
-               query = dict(urllib.parse.parse_qsl(url_parts[4]))
-               query.update({'subdir': name})
-               url_parts[4] = urllib.parse.urlencode(query)
+               url = self.url
+               query = urllib.parse.parse_qs(url[4])
+               query['subdir'] = name
+               url[4] = urllib.parse.urlencode(query)
 
                xmlfile = open(name + '.xml', 'w')
                xmlfile.write('<package name="' + escape(name) + '">\n')
-               xmlfile.write('  <scmsync>' + escape(urllib.parse.urlunparse(url_parts)) + '</scmsync>>\n')
+               xmlfile.write('  <scmsync>' + escape(urllib.parse.urlunparse(url)) + '</scmsync>>\n')
                xmlfile.write('</package>\n')
                xmlfile.close()
             else:
