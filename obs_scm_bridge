@@ -19,6 +19,7 @@ import sys
 import logging
 import subprocess
 import tempfile
+from html import escape
 import urllib.parse
 
 outdir = None
@@ -36,9 +37,8 @@ class ObsGit(object):
         self.outdir   = outdir
         self.revision = revision
         self.subdir   = ''
-        u = urllib.parse.urlparse(url)
-        query = urllib.parse.parse_qs(u.query);
-        self.url      = u.scheme + '://' + u.netloc + u.path
+        self.url = urllib.parse.urlparse(url)
+        query = urllib.parse.parse_qs(self.url.query);
         if "subdir" in query:
             self.subdir = query['subdir'][0]
 
@@ -67,7 +67,7 @@ class ObsGit(object):
         if self.subdir != '':
             clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
 
-        cmd = [ 'git', 'clone', '--depth', '1', self.url, clonedir ]
+        cmd = [ 'git', 'clone', '--depth', '1', urllib.parse.urlunparse(self.url), clonedir ]
         os.environ['LANG'] = "C"
         self.run_cmd(cmd, fatal="git clone")
 
@@ -145,6 +145,7 @@ class ObsGit(object):
     def generate_package_xml_files(self):
         logging.debug("walk via %s", self.outdir)
         os.chdir(self.outdir)
+
         listing = sorted(os.listdir("."))
         regexp =  re.compile(r"^[a-zA-Z0-9\.\-\_\+]*$");
         for name in listing:
@@ -154,9 +155,16 @@ class ObsGit(object):
                if not regexp.match(name):
                  logging.warn("directory name contains invalid char: " + name)
                  continue
+
+               # add subdir parameter to url
+               url_parts = list(self.url)
+               query = dict(urllib.parse.parse_qsl(url_parts[4]))
+               query.update({'subdir': name})
+               url_parts[4] = urllib.parse.urlencode(query)
+
                xmlfile = open(name + '.xml', 'w')
-               xmlfile.write('<package name="' + name + '">\n')
-               xmlfile.write('  <scmsync>' + self.url + "?subdir=" + name + '</scmsync>>\n')
+               xmlfile.write('<package name="' + escape(name) + '">\n')
+               xmlfile.write('  <scmsync>' + escape(urllib.parse.urlunparse(url_parts)) + '</scmsync>>\n')
                xmlfile.write('</package>\n')
                xmlfile.close()
             else:
