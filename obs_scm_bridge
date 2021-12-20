@@ -200,7 +200,7 @@ class ObsGit(object):
     def write_package_xml_file(self, name, url):
         xmlfile = open(name + '.xml', 'w')
         xmlfile.write('<package name="' + escape(name) + '">\n')
-        xmlfile.write('  <scmsync>' + escape(url) + '</scmsync>>\n')
+        xmlfile.write('  <scmsync>' + escape(url) + '</scmsync>\n')
         xmlfile.write('</package>\n')
         xmlfile.close()
 
