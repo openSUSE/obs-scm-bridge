@@ -27,13 +27,13 @@ outdir = None
 download_assets = '/usr/lib/build/download_assets'
 export_debian_orig_from_git = '/usr/lib/build/export_debian_orig_from_git'
 pack_directories = False
-download_assets = False
+get_assets = False
 
 if os.environ.get('DEBUG_SET_VERSION') == "1":
     logging.getLogger().setLevel(logging.DEBUG)
 if os.environ.get('OBS_SERVICE_DAEMON'):
     pack_directories = True
-    download_assets = True
+    get_assets = True
 os.environ['LANG'] = "C"
 
 class ObsGit(object):
@@ -153,7 +153,7 @@ class ObsGit(object):
     def get_assets(self):
         logging.info("downloading assets")
         if pack_directories:
-            cmd = [ download_assets, '--', self.outdir ]
+            cmd = [ download_assets, '--noassetdir', '--', self.outdir ]
         else:
             cmd = [ download_assets, '--unpack', '--noassetdir', '--', self.outdir ]
         self.run_cmd(cmd, fatal="asset download")
@@ -175,6 +175,27 @@ class ObsGit(object):
         if os.path.isfile(self.outdir + "/debian/control"):
             logging.info("exporting debian origtar")
             self.run_cmd(cmd, fatal="debian origtar export")
+
+    def get_subdir_info(self, dir):
+        cmd = [ download_assets, '--show-dir-srcmd5', '--', dir ]
+        rcode, info = self.run_cmd(cmd, fatal="download_assets --show-dir-srcmd5")
+        return info.strip()
+
+    def write_info_file(self, filename, info):
+        infofile = open(filename, 'w')
+        infofile.write(info + '\n')
+        infofile.close()
+
+    def add_service_info(self):
+        info = None
+        if self.subdir:
+            info = self.get_subdir_info(self.outdir)
+        else:
+            cmd = [ 'git', '-C', outdir, 'show', '-s', '--pretty=format:%H', 'HEAD' ]
+            rcode, info = self.run_cmd(cmd, fatal="git show -s HEAD")
+            info = info.strip()
+        if info:
+            self.write_info_file(os.path.join(self.outdir, "_service_info"), info)
 
     def write_package_xml_file(self, name, url):
         xmlfile = open(name + '.xml', 'w')
@@ -210,12 +231,9 @@ class ObsGit(object):
                 # find revision of submodule
                 cmd = [ 'git', 'ls-tree', 'HEAD', path ]
                 rcode, output = self.run_cmd(cmd, fatal="git ls-tree")
-                if rcode != 0:
-                    logging.error("Unable to find revision for git submodule " + section)
-                    sys.exit(1)
                 lstree = output.split()
                 revision = lstree[2]
-                if lstree[1] != 'commit' or len(revision) != 40:
+                if lstree[1] != 'commit' or len(revision) < 40:
                     logging.error("Invalid output of ls-tree for git submodule " + section)
                     sys.exit(1)
 
@@ -237,10 +255,14 @@ class ObsGit(object):
                     # already handled as git submodule
                     continue
 
+                info = self.get_subdir_info(name)
                 shutil.rmtree(name)
                 if not regexp.match(name):
                     logging.warn("directory name contains invalid char: " + name)
                     continue
+
+                # add subdir info file
+                self.write_info_file(name + ".info", info)
 
                 # add subdir parameter to url
                 url = self.url
@@ -291,10 +313,11 @@ if __name__ == '__main__':
         obsgit.generate_package_xml_files()
         sys.exit(0)
 
-    if download_assets:
+    if pack_directories:
+        obsgit.add_service_info()
+    if get_assets:
         obsgit.get_assets()
-
-    obsgit.get_debian_origtar()
+        obsgit.get_debian_origtar()
     if pack_directories:
         obsgit.export_debian_files()
         obsgit.cpio_directories()
