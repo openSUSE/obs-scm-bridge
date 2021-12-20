@@ -21,6 +21,7 @@ import subprocess
 import tempfile
 from html import escape
 import urllib.parse
+import configparser
 
 outdir = None
 download_assets = '/usr/lib/build/download_assets'
@@ -152,34 +153,82 @@ class ObsGit(object):
             logging.info("exporting debian origtar")
             self.run_cmd(cmd, fatal="debian origtar export")
 
+    def write_package_xml_file(self, name, url):
+        xmlfile = open(name + '.xml', 'w')
+        xmlfile.write('<package name="' + escape(name) + '">\n')
+        xmlfile.write('  <scmsync>' + escape(url) + '</scmsync>>\n')
+        xmlfile.write('</package>\n')
+        xmlfile.close()
+
     def generate_package_xml_files(self):
         logging.debug("walk via %s", self.outdir)
         os.chdir(self.outdir)
+        export_files = [ '_config' ]
 
+        # find all top level git submodules
+        gitsubmodules = {}
+        if os.path.isfile('.gitmodules'):
+            gsmconfig = configparser.ConfigParser()
+            gsmconfig.read('.gitmodules')
+            for section in gsmconfig.sections():
+                if not 'path' in gsmconfig[section]:
+                    logging.warn("path not defined for git submodule " + section)
+                    continue
+                if not 'url' in gsmconfig[section]:
+                    logging.warn("url not defined for git submodule " + section)
+                    continue
+                path = gsmconfig[section]['path']
+                url = gsmconfig[section]['url']
+
+                if '/' in path:
+                    # we handle only top level submodules in project mode
+                    continue
+
+                # find revision of submodule
+                cmd = [ 'git', 'ls-tree', 'HEAD', path ]
+                rcode, output = self.run_cmd(cmd, fatal="git ls-tree")
+                if rcode != 0:
+                    logging.error("Unable to find revision for git submodule " + section)
+                    sys.exit(1)
+                lstree = output.split()
+                revision = lstree[2]
+                if lstree[1] != 'commit' or len(revision) != 40:
+                    logging.error("Invalid output of ls-tree for git submodule " + section)
+                    sys.exit(1)
+
+                # all good, write xml file and register the module
+                gitsubmodules[path] = url
+                self.write_package_xml_file(path, url + '#' + revision)
+                export_files.append(path + ".xml")
+                shutil.rmtree(path)
+
+        # handle plain files and directories
         listing = sorted(os.listdir("."))
         regexp =  re.compile(r"^[a-zA-Z0-9\.\-\_\+]*$");
         for name in listing:
-            # FIXME: add support for git submodules
+            if name == '.git':
+                shutil.rmtree(name)
+                continue
             if os.path.isdir(name):
-               shutil.rmtree(name)
-               if not regexp.match(name):
-                 logging.warn("directory name contains invalid char: " + name)
-                 continue
+                if name in gitsubmodules.keys():
+                    # already handled as git submodule
+                    continue
 
-               # add subdir parameter to url
-               url = self.url
-               query = urllib.parse.parse_qs(url[4])
-               query['subdir'] = name
-               url[4] = urllib.parse.urlencode(query)
+                shutil.rmtree(name)
+                if not regexp.match(name):
+                    logging.warn("directory name contains invalid char: " + name)
+                    continue
 
-               xmlfile = open(name + '.xml', 'w')
-               xmlfile.write('<package name="' + escape(name) + '">\n')
-               xmlfile.write('  <scmsync>' + escape(urllib.parse.urlunparse(url)) + '</scmsync>>\n')
-               xmlfile.write('</package>\n')
-               xmlfile.close()
+                # add subdir parameter to url
+                url = self.url
+                query = urllib.parse.parse_qs(url[4])
+                query['subdir'] = name
+                url[4] = urllib.parse.urlencode(query)
+
+                self.write_package_xml_file(name, urllib.parse.urlunparse(url))
             else:
-               if name != "_config":
-                   os.unlink(name)
+                if not name in export_files:
+                    os.unlink(name)
 
 if __name__ == '__main__':
 
