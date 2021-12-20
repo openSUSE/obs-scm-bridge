@@ -35,16 +35,19 @@ if os.environ.get('OBS_SERVICE_DAEMON'):
 os.environ['LANG'] = "C"
 
 class ObsGit(object):
-    def __init__(self, outdir, url, revision=None):
+    def __init__(self, outdir, url):
         self.outdir   = outdir
-        self.revision = revision
-        self.subdir   = ''
+        self.revision = None
+        self.subdir   = None
         self.url = list(urllib.parse.urlparse(url))
         query = urllib.parse.parse_qs(self.url[4]);
         if "subdir" in query:
             self.subdir = query['subdir'][0]
             del query['subdir']
             self.url[4] = urllib.parse.urlencode(query)
+        if self.url[5]:
+            self.revision = self.url[5]
+            self.url[5] = ''
 
     def run_cmd(self, cmd, cwd=None, stdout=subprocess.PIPE, fatal=None):
         logging.debug("COMMAND: %s" % cmd)
@@ -65,22 +68,40 @@ class ObsGit(object):
             sys.exit(proc.returncode)
         return (proc.returncode, output)
 
-    def clone_subdir(self, subdir):
-        clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
-        cmd = [ 'git', 'clone', '--depth', '1', urllib.parse.urlunparse(self.url), clonedir ]
+    def do_clone_commit(self, outdir):
+        cmd = [ 'git', 'init', outdir ]
+        self.run_cmd(cmd, fatal="git init")
+        cmd = [ 'git', '-C', outdir, 'remote', 'add', 'origin', urllib.parse.urlunparse(self.url) ]
+        self.run_cmd(cmd, fatal="git remote add origin")
+        cmd = [ 'git', '-C', outdir, 'fetch', '--depth', '1', 'origin', self.revision ]
+        self.run_cmd(cmd, fatal="git fetch")
+        cmd = [ 'git', '-C', outdir, 'checkout', '-q', self.revision ]
+        self.run_cmd(cmd, fatal="git checkout")
+
+    def do_clone(self, outdir):
+        if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
+            return self.do_clone_commit(outdir)
+        cmd = [ 'git', 'clone', '--depth', '1', urllib.parse.urlunparse(self.url), outdir ]
+        if self.revision:
+            cmd.insert(2, '-b')
+            cmd.insert(3, self.revision)
         self.run_cmd(cmd, fatal="git clone")
+
+    def clone(self):
+        if not self.subdir:
+            self.do_clone(self.outdir)
+            return
+        clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
+        self.do_clone(clonedir)
+        fromdir = os.path.join(clonedir, self.subdir)
+        if not os.path.isdir(fromdir):
+            print("ERROR: subdir " + self.subdir + " does not exist")
+            sys.exit(1)
         if not os.path.isdir(self.outdir):
             os.makedirs(self.outdir)
-        fromdir = os.path.join(clonedir, subdir)
         for name in os.listdir(fromdir):
             shutil.move(os.path.join(fromdir, name), self.outdir)
         shutil.rmtree(clonedir)
-
-    def clone(self):
-        if self.subdir:
-            return self.clone_subdir(self.subdir)
-        cmd = [ 'git', 'clone', '--depth', '1', urllib.parse.urlunparse(self.url), self.outdir ]
-        self.run_cmd(cmd, fatal="git clone")
 
     def cpio_directory(self, directory):
         logging.info("create archivefile for %s", directory)
