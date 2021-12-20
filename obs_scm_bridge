@@ -240,7 +240,9 @@ class ObsGit(object):
                 # all good, write xml file and register the module
                 gitsubmodules.add(path)
                 self.write_package_xml_file(path, url + '#' + revision)
+                self.write_info_file(path + ".info", revision)
                 export_files.add(path + ".xml")
+                export_files.add(path + ".info")
                 shutil.rmtree(path)
 
         # handle plain files and directories
