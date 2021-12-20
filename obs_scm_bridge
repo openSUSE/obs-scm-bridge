@@ -42,7 +42,10 @@ class ObsGit(object):
         query = urllib.parse.parse_qs(self.url.query);
         if "subdir" in query:
             self.subdir = query['subdir'][0]
-
+            del query['subdir']
+            url_parts = list(self.url)
+            url_parts[4] = urllib.parse.urlencode(query)
+            self.url = url_parts
 
     def run_cmd(self, cmd, cwd=None, stdout=subprocess.PIPE, fatal=None):
         logging.debug("COMMAND: %s" % cmd)
@@ -63,21 +66,22 @@ class ObsGit(object):
             sys.exit(proc.returncode)
         return (proc.returncode, output)
 
-    def clone(self):
-        clonedir = self.outdir
-        if self.subdir:
-            clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
-
+    def clone_subdir(self, subdir):
+        clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
         cmd = [ 'git', 'clone', '--depth', '1', urllib.parse.urlunparse(self.url), clonedir ]
         self.run_cmd(cmd, fatal="git clone")
+        if not os.path.isdir(self.outdir):
+            os.makedirs(self.outdir)
+        fromdir = os.path.join(clonedir, subdir)
+        for name in os.listdir(fromdir):
+            shutil.move(os.path.join(fromdir, name), self.outdir)
+        shutil.rmtree(clonedir)
 
+    def clone(self):
         if self.subdir:
-            fromdir = os.path.join(clonedir, self.subdir)
-            if not os.path.isdir(self.outdir):
-                os.makedirs(self.outdir)
-            for name in os.listdir(fromdir):
-                shutil.move(os.path.join(fromdir, name), self.outdir)
-            shutil.rmtree(clonedir)
+            return self.clone_subdir(self.subdir)
+        cmd = [ 'git', 'clone', '--depth', '1', urllib.parse.urlunparse(self.url), self.outdir ]
+        self.run_cmd(cmd, fatal="git clone")
 
     def cpio_directory(self, directory):
         logging.info("create archivefile for %s", directory)
