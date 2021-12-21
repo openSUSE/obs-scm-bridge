@@ -105,6 +105,11 @@ class ObsGit(object):
             shutil.move(os.path.join(fromdir, name), self.outdir)
         shutil.rmtree(clonedir)
 
+    def fetch_tags(self):
+        cmd = [ 'git', '-C', self.outdir, 'fetch', '--tags' ]
+        logging.info("fetching all tags")
+        self.run_cmd(cmd, fatal="fetch --tags")
+
     def cpio_directory(self, directory):
         logging.info("create archivefile for %s", directory)
         cmd = [ download_assets, '--create-cpio', '--', directory ]
@@ -171,8 +176,11 @@ class ObsGit(object):
             self.copyfile("debian/changelog", "debian.changelog")
 
     def get_debian_origtar(self):
-        cmd = [ export_debian_orig_from_git, self.outdir ]
         if os.path.isfile(self.outdir + "/debian/control"):
+            # need up get all tags 
+            if not self.subdir:
+                self.fetch_tags()
+            cmd = [ export_debian_orig_from_git, self.outdir ]
             logging.info("exporting debian origtar")
             self.run_cmd(cmd, fatal="debian origtar export")
 
