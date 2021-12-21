@@ -106,7 +106,7 @@ class ObsGit(object):
         shutil.rmtree(clonedir)
 
     def fetch_tags(self):
-        cmd = [ 'git', '-C', self.outdir, 'fetch', '--tags' ]
+        cmd = [ 'git', '-C', self.outdir, 'fetch', '--tags', 'origin', '+refs/heads/*:refs/remotes/origin/*' ]
         logging.info("fetching all tags")
         self.run_cmd(cmd, fatal="fetch --tags")
 
