@@ -15,8 +15,8 @@ asset support instead, which is described in pbuild documentation:
 
 These assets will be downloaded by osc and OBS. The verification via sha256 sum is optional.
 
-HOWTO
-=====
+HOWTO manage a single package
+=============================
 
 The current way to define a git repository for an OBS package is using the `scmsync`
 element inside the package meta.
@@ -37,16 +37,22 @@ which will create a git repository inside of the classic osc checkout.
 
 The only further tested functionality is to do local builds atm.
 
+HOWTO manage an entire project
+==============================
+
+A git repository can also get defined for entire project. This can be done
+via the scmsync element in project meta.
+
+Any top level subdirectory will be handled as package container. 
+
+It is recomended to use git submodules for each package if it is a larger
+project. This allows partial cloning of the specific package.
+
 TODO
 ====
 
- * Clean integration via a proper meta data defintion.
-
  * Monitoring changes in referenced repository. (can currently be workarounded
    via "osc service rr")
-
- * Project level support: Packages are defined via a gitlab/github project.
-   Just creating a git repository there creates a new package in OBS.
 
  * osc upstream integration
 

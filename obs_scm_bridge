@@ -34,6 +34,8 @@ if os.environ.get('DEBUG_SET_VERSION') == "1":
 if os.environ.get('OBS_SERVICE_DAEMON'):
     pack_directories = True
     get_assets = True
+if os.environ.get('OSC_VERSION'):
+    get_assets = True
 os.environ['LANG'] = "C"
 
 class ObsGit(object):
