@@ -43,11 +43,16 @@ class ObsGit(object):
         self.outdir   = outdir
         self.revision = None
         self.subdir   = None
+        self.arch = []
         self.url = list(urllib.parse.urlparse(url))
         query = urllib.parse.parse_qs(self.url[4]);
         if "subdir" in query:
             self.subdir = query['subdir'][0]
             del query['subdir']
+            self.url[4] = urllib.parse.urlencode(query)
+        if "arch" in query:
+            self.arch = query['arch']
+            del query['arch']
             self.url[4] = urllib.parse.urlencode(query)
         if self.url[5]:
             self.revision = self.url[5]
@@ -159,10 +164,13 @@ class ObsGit(object):
 
     def get_assets(self):
         logging.info("downloading assets")
+        cmd = [ download_assets ]
+        for arch in self.arch:
+            cmd += [ '--arch', arch ]
         if pack_directories:
-            cmd = [ download_assets, '--noassetdir', '--', self.outdir ]
+            cmd += [ '--noassetdir', '--', self.outdir ]
         else:
-            cmd = [ download_assets, '--unpack', '--noassetdir', '--', self.outdir ]
+            cmd += [ '--unpack', '--noassetdir', '--', self.outdir ]
         self.run_cmd(cmd, fatal="asset download")
 
     def copyfile(self, src, dst):
@@ -249,7 +257,13 @@ class ObsGit(object):
 
                 # all good, write xml file and register the module
                 gitsubmodules.add(path)
-                self.write_package_xml_file(path, url + '#' + revision)
+                url = list(urllib.parse.urlparse(url))
+                url[5] = revision
+                if self.arch:
+                    query = urllib.parse.parse_qs(url[4]);
+                    query['arch'] = self.arch
+                    url[4] = urllib.parse.urlencode(query)
+                self.write_package_xml_file(path, urllib.parse.urlunparse(url))
                 self.write_info_file(path + ".info", revision)
                 export_files.add(path + ".xml")
                 export_files.add(path + ".info")
