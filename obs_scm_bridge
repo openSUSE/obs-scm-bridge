@@ -29,7 +29,7 @@ export_debian_orig_from_git = '/usr/lib/build/export_debian_orig_from_git'
 pack_directories = False
 get_assets = False
 
-if os.environ.get('DEBUG_SET_VERSION') == "1":
+if os.environ.get('DEBUG_SCM_BRIDGE') == "1":
     logging.getLogger().setLevel(logging.DEBUG)
 if os.environ.get('OBS_SERVICE_DAEMON'):
     pack_directories = True
