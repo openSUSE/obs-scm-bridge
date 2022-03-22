@@ -50,6 +50,9 @@ class ObsGit(object):
             self.subdir = query['subdir'][0]
             del query['subdir']
             self.url[4] = urllib.parse.urlencode(query)
+            if '../' in self.subdir:
+                print('ERROR: relative path elements are not allowed in subdir parameter')
+                sys.exit(1)
         if "arch" in query:
             self.arch = query['arch']
             del query['arch']
