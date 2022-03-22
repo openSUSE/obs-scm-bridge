@@ -50,9 +50,6 @@ class ObsGit(object):
             self.subdir = query['subdir'][0]
             del query['subdir']
             self.url[4] = urllib.parse.urlencode(query)
-            if '../' in self.subdir:
-                print('ERROR: relative path elements are not allowed in subdir parameter')
-                sys.exit(1)
         if "arch" in query:
             self.arch = query['arch']
             del query['arch']
@@ -106,6 +103,10 @@ class ObsGit(object):
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
         self.do_clone(clonedir)
         fromdir = os.path.join(clonedir, self.subdir)
+        if not os.path.realpath(fromdir).startswith(os.path.realpath(clonedir)):
+            print("ERROR: subdir is not below clone directory")
+            sys.exit(1)
+
         if not os.path.isdir(fromdir):
             print("ERROR: subdir " + self.subdir + " does not exist")
             sys.exit(1)
