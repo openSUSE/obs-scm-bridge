@@ -103,10 +103,9 @@ class ObsGit(object):
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
         self.do_clone(clonedir)
         fromdir = os.path.join(clonedir, self.subdir)
-        if not os.path.realpath(fromdir).startswith(os.path.realpath(clonedir)):
+        if not os.path.realpath(fromdir+'/').startswith(os.path.realpath(clonedir+'/')):
             print("ERROR: subdir is not below clone directory")
             sys.exit(1)
-
         if not os.path.isdir(fromdir):
             print("ERROR: subdir " + self.subdir + " does not exist")
             sys.exit(1)
