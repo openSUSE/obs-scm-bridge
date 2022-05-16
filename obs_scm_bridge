@@ -43,6 +43,7 @@ class ObsGit(object):
         self.outdir   = outdir
         self.revision = None
         self.subdir   = None
+        self.lfs = False
         self.arch = []
         self.url = list(urllib.parse.urlparse(url))
         query = urllib.parse.parse_qs(self.url[4]);
@@ -53,6 +54,10 @@ class ObsGit(object):
         if "arch" in query:
             self.arch = query['arch']
             del query['arch']
+            self.url[4] = urllib.parse.urlencode(query)
+        if "lfs" in query:
+            self.lfs = True
+            del query['lfs']
             self.url[4] = urllib.parse.urlencode(query)
         if self.url[5]:
             self.revision = self.url[5]
@@ -77,6 +82,10 @@ class ObsGit(object):
             sys.exit(proc.returncode)
         return (proc.returncode, output)
 
+    def do_lfs(self, outdir):
+        cmd = [ 'git', '-C', outdir, 'lfs', 'fetch' ]
+        self.run_cmd(cmd, fatal="git lfs fetch")
+
     def do_clone_commit(self, outdir):
         cmd = [ 'git', 'init', outdir ]
         self.run_cmd(cmd, fatal="git init")
@@ -89,12 +98,17 @@ class ObsGit(object):
 
     def do_clone(self, outdir):
         if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
-            return self.do_clone_commit(outdir)
+            self.do_clone_commit(outdir)
+            if self.lfs:
+                self.do_lfs(outdir)
+            return
         cmd = [ 'git', 'clone', '--depth', '1', urllib.parse.urlunparse(self.url), outdir ]
         if self.revision:
             cmd.insert(2, '-b')
             cmd.insert(3, self.revision)
         self.run_cmd(cmd, fatal="git clone")
+        if self.lfs:
+            self.do_lfs(outdir)
 
     def clone(self):
         if not self.subdir:
