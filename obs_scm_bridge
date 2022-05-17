@@ -239,6 +239,16 @@ class ObsGit(object):
         xmlfile.write('</package>\n')
         xmlfile.close()
 
+    def list_submodule_revisions(self):
+        revisions = {}
+        cmd = [ 'git', 'ls-tree', 'HEAD', '.' ]
+        rcode, output = self.run_cmd(cmd, fatal="git ls-tree")
+        for line in output.splitlines():
+            lstree = line.split(maxsplit=4)
+            if lstree[1] == 'commit' and len(lstree[2]) >= 40:
+                revisions[lstree[3]] = lstree[2]
+        return revisions
+           
     def generate_package_xml_files(self):
         logging.debug("walk via %s", self.outdir)
         os.chdir(self.outdir)
@@ -249,6 +259,7 @@ class ObsGit(object):
         if os.path.isfile('.gitmodules'):
             gsmconfig = configparser.ConfigParser()
             gsmconfig.read('.gitmodules')
+            revisions = None
             for section in gsmconfig.sections():
                 if not 'path' in gsmconfig[section]:
                     logging.warn("path not defined for git submodule " + section)
@@ -264,12 +275,11 @@ class ObsGit(object):
                     continue
 
                 # find revision of submodule
-                cmd = [ 'git', 'ls-tree', 'HEAD', path ]
-                rcode, output = self.run_cmd(cmd, fatal="git ls-tree")
-                lstree = output.split()
-                revision = lstree[2]
-                if lstree[1] != 'commit' or len(revision) < 40:
-                    logging.error("Invalid output of ls-tree for git submodule " + section)
+                if revisions is None:
+                    revisions = self.list_submodule_revisions()
+                revision = revisions.get(path, None)
+                if not revision:
+                    logging.error("Could not determine revision of submodule " + section)
                     sys.exit(1)
 
                 # all good, write xml file and register the module
