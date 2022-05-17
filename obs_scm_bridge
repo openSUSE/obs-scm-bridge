@@ -242,7 +242,7 @@ class ObsGit(object):
     def generate_package_xml_files(self):
         logging.debug("walk via %s", self.outdir)
         os.chdir(self.outdir)
-        export_files = set("_config")
+        export_files = set(["_config"])
 
         # find all top level git submodules
         gitsubmodules = set()
