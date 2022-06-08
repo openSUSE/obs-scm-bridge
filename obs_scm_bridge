@@ -28,6 +28,7 @@ download_assets = '/usr/lib/build/download_assets'
 export_debian_orig_from_git = '/usr/lib/build/export_debian_orig_from_git'
 pack_directories = False
 get_assets = False
+shallow_clone = True
 
 if os.environ.get('DEBUG_SCM_BRIDGE') == "1":
     logging.getLogger().setLevel(logging.DEBUG)
@@ -36,6 +37,7 @@ if os.environ.get('OBS_SERVICE_DAEMON'):
     get_assets = True
 if os.environ.get('OSC_VERSION'):
     get_assets = True
+    shallow_clone = False
 os.environ['LANG'] = "C"
 
 class ObsGit(object):
@@ -91,7 +93,10 @@ class ObsGit(object):
         self.run_cmd(cmd, fatal="git init")
         cmd = [ 'git', '-C', outdir, 'remote', 'add', 'origin', urllib.parse.urlunparse(self.url) ]
         self.run_cmd(cmd, fatal="git remote add origin")
-        cmd = [ 'git', '-C', outdir, 'fetch', '--depth', '1', 'origin', self.revision ]
+        cmd = [ 'git', '-C', outdir, 'fetch', 'origin', self.revision ]
+        if shallow_clone:
+            cmd += [ '--depth', '1' ]
+        print(cmd)
         self.run_cmd(cmd, fatal="git fetch")
         cmd = [ 'git', '-C', outdir, 'checkout', '-q', self.revision ]
         self.run_cmd(cmd, fatal="git checkout")
@@ -102,7 +107,9 @@ class ObsGit(object):
             if self.lfs:
                 self.do_lfs(outdir)
             return
-        cmd = [ 'git', 'clone', '--depth', '1', urllib.parse.urlunparse(self.url), outdir ]
+        cmd = [ 'git', 'clone', urllib.parse.urlunparse(self.url), outdir ]
+        if shallow_clone:
+            cmd += [ '--depth', '1' ]
         if self.revision:
             cmd.insert(2, '-b')
             cmd.insert(3, self.revision)
