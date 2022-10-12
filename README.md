@@ -48,13 +48,22 @@ Any top level subdirectory will be handled as package container.
 It is recomended to use git submodules for each package if it is a larger
 project. This allows partial cloning of the specific package.
 
+Special directives
+==================
+
+Special directives can be given via cgi parameters to the bridge. Extend
+your url with
+
+ * lfs=1 CGI parameter to include LFS resources
+
+ * arch=<ARCH> CGI parameter to specify arch specific assets downloads
+
+ * keepmeta=1 CGI parameter to include full git vcs data (.git directory)
+
+ * subdir=<DIRECTORY> CGI parameter to package only a subdirectory
+
 TODO
 ====
-
- * Monitoring changes in referenced repository. (can currently be workarounded
-   via "osc service rr")
-
- * osc upstream integration
 
  * signature validation
 
@@ -62,5 +71,5 @@ TODO
    they do not belong to the git repository
     auto extending .gitignore? (esp. when downloading asset files?)
 
- * make cpio generation bit identical (avoid mtime from clone)
+ * make cpio generation bit identical (avoiding mtime from clone)
 

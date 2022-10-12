@@ -46,6 +46,8 @@ class ObsGit(object):
         self.revision = None
         self.subdir   = None
         self.lfs = False
+        self.keep_meta = False
+        self.enforced_deep_clone = False
         self.arch = []
         self.url = list(urllib.parse.urlparse(url))
         query = urllib.parse.parse_qs(self.url[4]);
@@ -60,6 +62,11 @@ class ObsGit(object):
         if "lfs" in query:
             self.lfs = True
             del query['lfs']
+            self.url[4] = urllib.parse.urlencode(query)
+        if "keepmeta" in query:
+            self.enforced_deep_clone = True
+            self.keep_meta = True
+            del query['keepmeta']
             self.url[4] = urllib.parse.urlencode(query)
         if self.url[5]:
             self.revision = self.url[5]
@@ -101,14 +108,15 @@ class ObsGit(object):
         cmd = [ 'git', '-C', outdir, 'checkout', '-q', self.revision ]
         self.run_cmd(cmd, fatal="git checkout")
 
-    def do_clone(self, outdir):
+    def do_clone(self, outdir, shallow):
         if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
             self.do_clone_commit(outdir)
             if self.lfs:
                 self.do_lfs(outdir)
             return
         cmd = [ 'git', 'clone', urllib.parse.urlunparse(self.url), outdir ]
-        if shallow_clone:
+        if shallow:
+            print("XXX SHALLOW CLONE")
             cmd += [ '--depth', '1' ]
         if self.revision:
             cmd.insert(2, '-b')
@@ -117,12 +125,12 @@ class ObsGit(object):
         if self.lfs:
             self.do_lfs(outdir)
 
-    def clone(self):
+    def clone(self, shallow_clone):
         if not self.subdir:
-            self.do_clone(self.outdir)
+            self.do_clone(self.outdir, (shallow_clone and not self.enforced_deep_clone))
             return
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
-        self.do_clone(clonedir)
+        self.do_clone(clonedir, (shallow_clone and not self.enforced_deep_clone))
         fromdir = os.path.join(clonedir, self.subdir)
         if not os.path.realpath(fromdir+'/').startswith(os.path.realpath(clonedir+'/')):
             print("ERROR: subdir is not below clone directory")
@@ -163,9 +171,9 @@ class ObsGit(object):
         listing = sorted(os.listdir("."))
         specials = []
         for name in listing:
-            if name == '.git':
-                # we do not store git meta data service side atm to avoid bloat storage
-                # however, this will break some builds, so we will need an opt-out in future
+            if name == '.git' and not self.keep_meta:
+                print("remove META")
+                # we do not store git meta data by default to avoid bloat storage
                 shutil.rmtree(name)
                 continue
             if name[0:1] == '.':
@@ -307,14 +315,13 @@ class ObsGit(object):
         listing = sorted(os.listdir("."))
         regexp =  re.compile(r"^[a-zA-Z0-9\.\-\_\+]*$");
         for name in listing:
-            if name == '.git':
+            if name == '.git' and not self.keep_meta:
                 shutil.rmtree(name)
                 continue
             if os.path.isdir(name):
                 if name in gitsubmodules:
                     # already handled as git submodule
                     continue
-
                 info = self.get_subdir_info(name)
                 shutil.rmtree(name)
                 if not regexp.match(name):
@@ -368,7 +375,7 @@ if __name__ == '__main__':
 
     # workflow
     obsgit = ObsGit(outdir, url)
-    obsgit.clone()
+    obsgit.clone(shallow_clone)
     if project_mode == 'true' or project_mode == '1':
         obsgit.generate_package_xml_files()
         sys.exit(0)
