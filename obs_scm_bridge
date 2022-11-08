@@ -116,7 +116,6 @@ class ObsGit(object):
             return
         cmd = [ 'git', 'clone', urllib.parse.urlunparse(self.url), outdir ]
         if shallow:
-            print("XXX SHALLOW CLONE")
             cmd += [ '--depth', '1' ]
         if self.revision:
             cmd.insert(2, '-b')
@@ -336,6 +335,8 @@ class ObsGit(object):
                 query = urllib.parse.parse_qs(url[4])
                 query['subdir'] = name
                 url[4] = urllib.parse.urlencode(query)
+                if self.revision:
+                    self.url[5] = self.revision
 
                 self.write_package_xml_file(name, urllib.parse.urlunparse(url))
             else:
