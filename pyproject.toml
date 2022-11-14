@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "obs-scm-bridge"
+version = "0.2.1"
+description = "A helper service to work with git repositories in OBS"
+authors = ["Adrian Schröter <adrian@suse.de>", "Michael Schroeder <mls@suse.de>"]
+license = "GPL-2.0-or-later"
+readme = "README.md"
+packages = [{include = "obs_scm_bridge"}]
+
+[tool.poetry.dependencies]
+python = ">=3.6.2,<4.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest-container = "^0.0.2"
+pytest-xdist = "^3.0.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
