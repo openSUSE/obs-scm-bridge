@@ -283,6 +283,8 @@ class ObsGit(object):
                     continue
                 path = gsmconfig[section]['path']
                 url = gsmconfig[section]['url']
+                if url.startswith('../'):
+                    url = urllib.parse.urljoin(urllib.parse.urlunparse(self.url), url)
 
                 if '/' in path:
                     # we handle only top level submodules in project mode
