@@ -230,9 +230,8 @@ class ObsGit(object):
         return info.strip()
 
     def write_info_file(self, filename, info):
-        infofile = open(filename, 'w')
-        infofile.write(info + '\n')
-        infofile.close()
+        with open(filename, 'w') as infofile:
+            infofile.write(info + '\n')
 
     def add_service_info(self):
         info = None
@@ -245,12 +244,11 @@ class ObsGit(object):
         if info:
             self.write_info_file(os.path.join(self.outdir, "_service_info"), info)
 
-    def write_package_xml_file(self, name, url):
-        xmlfile = open(name + '.xml', 'w')
-        xmlfile.write('<package name="' + escape(name) + '">\n')
-        xmlfile.write('  <scmsync>' + escape(url) + '</scmsync>\n')
-        xmlfile.write('</package>\n')
-        xmlfile.close()
+    def write_package_xml_file(self, name: str, url: str) -> None:
+        with open(f"{name}.xml", 'w') as xmlfile:
+            xmlfile.write(f"""<package name="{escape(name)}">
+  <scmsync>{escape(url)}</scmsync>
+</package>""")
 
     def list_submodule_revisions(self):
         revisions = {}
