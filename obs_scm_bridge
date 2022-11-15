@@ -358,26 +358,23 @@ if __name__ == '__main__':
         description='Open Build Service source service for managing packaging files in git.'
         'This is a special service for OBS git integration.')
     parser.add_argument('--outdir', required=True,
-                        help='output directory for modified sources')
+                        help='output directory for modified sources',
+                        nargs=1,
+                        type=str)
     parser.add_argument('--url',
-                        help='REQUIRED: url to git repository')
+                        help='REQUIRED: url to git repository',
+                        required=True,
+                        nargs=1,
+                        type=str)
     parser.add_argument('--projectmode',
                         help='just return the package list based on the subdirectories')
     parser.add_argument('--debug',
                         help='verbose debug mode')
     args = vars(parser.parse_args())
 
-    url = args['url']
-    outdir = args['outdir']
+    url = args['url'][0]
+    outdir = args['outdir'][0]
     project_mode = args['projectmode']
-
-    if not outdir:
-        print("no outdir specified")
-        sys.exit(-1)
-
-    if not url:
-        print("no url specified")
-        sys.exit(-1)
 
     if args['debug']:
         logging.getLogger().setLevel(logging.DEBUG)
