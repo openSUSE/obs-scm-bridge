@@ -87,9 +87,7 @@ class ObsGit(object):
                                 stdout=stdout,
                                 stderr=stderr,
                                 cwd=cwd)
-        output = proc.communicate()[0]
-        if isinstance(output, bytes):
-            output = output.decode('UTF-8')
+        output = proc.communicate()[0].decode("utf-8")
         logging.debug("RESULT(%d): %s", proc.returncode, repr(output))
         if fatal and proc.returncode != 0:
             print("ERROR: " + fatal + " failed: ", output)
