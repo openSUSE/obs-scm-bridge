@@ -1,0 +1,25 @@
+---
+name: CI
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+
+jobs:
+  integration:
+    name: Run the integration tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4.3.0
+      - uses: Gr1N/setup-poetry@v7
+      - uses: actions/cache@v3
+        with:
+          path: ~/.tox
+          key: tox-${{ hashFiles('poetry.lock') }}
+
+      - run: poetry install
+      - run: poetry run pytest -vv -- -n auto
