@@ -304,7 +304,16 @@ class ObsGit(object):
                     query = urllib.parse.parse_qs(url[4]);
                     query['arch'] = self.arch
                     url[4] = urllib.parse.urlencode(query)
-                self.write_package_xml_file(path, urllib.parse.urlunparse(url))
+
+                # handle relative urls in submodules
+                unparsed_url = urllib.parse.urlunparse(url)
+                if ".." == unparsed_url[0:2]:
+                    # need to append a '/' to the base url so that the relative
+                    # path is properly resolved, otherwise we might descend one
+                    # directory too far
+                    unparsed_url = urllib.parse.urljoin(urllib.parse.urlunparse(self.url) +"/", unparsed_url)
+
+                self.write_package_xml_file(path, unparsed_url)
                 self.write_info_file(path + ".info", revision)
                 export_files.add(path + ".xml")
                 export_files.add(path + ".info")
