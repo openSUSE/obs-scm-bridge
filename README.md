@@ -2,8 +2,8 @@
 Native OBS SCM bridge helper
 ============================
 
-Native OBS scm support for the build recipies and additional files. This is bridging an external authorative
-scm repository into OBS. Any source change or merge workflow must be provided via the scm repository 
+Native OBS scm support for the build recipies and additional files. This is bridging an external authoritative
+scm repository into OBS. Any source change or merge workflow must be provided via the scm repository
 hoster in this scenario.
 
 Only git is supported atm, but this can be extended later to further systems.
@@ -14,6 +14,10 @@ asset support instead, which is described in pbuild documentation:
   http://opensuse.github.io/obs-build/pbuild.html#_remote_assets
 
 These assets will be downloaded by osc and OBS. The verification via sha256 sum is optional.
+
+Alternatively, put large binary files into
+[git-lfs](https://git-lfs.github.com/). This service will automatically download
+git-lfs assets.
 
 HOWTO manage a single package
 =============================
@@ -43,7 +47,7 @@ HOWTO manage an entire project
 A git repository can also get defined for entire project. This can be done
 via the scmsync element in project meta.
 
-Any top level subdirectory will be handled as package container. 
+Any top level subdirectory will be handled as package container.
 
 It is recomended to use git submodules for each package if it is a larger
 project. This allows partial cloning of the specific package.
@@ -54,7 +58,7 @@ Special directives
 Special directives can be given via cgi parameters to the bridge. Extend
 your url with
 
- * lfs=1 CGI parameter to include LFS resources
+ * `lfs=0` to skip downloading LFS assets
 
  * arch=<ARCH> CGI parameter to specify arch specific assets downloads
 

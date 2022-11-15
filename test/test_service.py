@@ -2,6 +2,7 @@ from itertools import product
 
 import xml.etree.ElementTree as ET
 
+import pytest
 from pytest_container import DerivedContainer
 from pytest_container.container import ContainerData
 
@@ -9,15 +10,17 @@ from pytest_container.container import ContainerData
 _RPMS_DIR = "/src/rpms/"
 
 _AAA_BASE_URL = "https://github.com/openSUSE/aaa_base"
+_LIBECONF_URL = "https://github.com/openSUSE/libeconf"
 
-CONTAINERFILE = f"""RUN zypper -n in python3 git build diff
+CONTAINERFILE = f"""RUN zypper -n in python3 git build diff && \
+    . /etc/os-release && [[ ${{NAME}} = "SLES" ]] || zypper -n in git-lfs
 
 RUN git config --global user.name "SUSE Bot" && \
     git config --global user.email "noreply@suse.com" && \
     git config --global protocol.file.allow always
 
 RUN mkdir -p {_RPMS_DIR}ring0 && \
-    cd {_RPMS_DIR} && git clone https://github.com/openSUSE/libeconf && \
+    cd {_RPMS_DIR} && git clone {_LIBECONF_URL} && \
     cd libeconf && git rev-parse HEAD > /src/libeconf && \
     cd {_RPMS_DIR}ring0 && \
     git init && git submodule add {_AAA_BASE_URL} && \
@@ -47,6 +50,9 @@ BCI_BASE_15_3, BCI_BASE_15_4 = (
 
 
 CONTAINER_IMAGES = [TUMBLEWEED, LEAP_15_3, LEAP_15_4, BCI_BASE_15_3, BCI_BASE_15_4]
+
+
+_OBS_SCM_BRIDGE_CMD = "obs_scm_bridge --debug 1"
 
 
 def test_service_help(auto_container: ContainerData):
@@ -115,3 +121,41 @@ def test_creates_packagelist(auto_container_per_test: ContainerData):
                 f"{dest}/{pkg_name}.info"
             ).content_string.strip()
         )
+
+
+LFS_REPO = "https://gitea.opensuse.org/adrianSuSE/git-example-lfs"
+
+
+@pytest.mark.parametrize("fragment", ["", "#dc16ed074a49fbd104166d979b3045cc5d84db04"])
+@pytest.mark.parametrize("query", ["", "?lfs=1"])
+@pytest.mark.parametrize(
+    "container_per_test", [TUMBLEWEED, LEAP_15_3, LEAP_15_4], indirect=True
+)
+def test_downloads_lfs(container_per_test: ContainerData, fragment: str, query: str):
+    """Test that the lfs file is automatically downloaded from the lfs server on
+    clone.
+
+    """
+    _DEST = "/tmp/lfs-example"
+    container_per_test.connection.run_expect(
+        [0], f"{_OBS_SCM_BRIDGE_CMD} --outdir {_DEST} --url {LFS_REPO}{query}{fragment}"
+    )
+
+    tar_archive = container_per_test.connection.file(f"{_DEST}/orangebox-0.2.0.tar.gz")
+    assert tar_archive.exists and tar_archive.is_file
+    assert tar_archive.size > 10 * 1024
+
+
+@pytest.mark.parametrize("fragment", ["", "#dc16ed074a49fbd104166d979b3045cc5d84db04"])
+def test_lfs_opt_out(auto_container_per_test: ContainerData, fragment: str):
+    _DEST = "/tmp/lfs-example"
+    auto_container_per_test.connection.run_expect(
+        [0], f"{_OBS_SCM_BRIDGE_CMD} --outdir {_DEST} --url {LFS_REPO}?lfs=0{fragment}"
+    )
+
+    tar_archive = auto_container_per_test.connection.file(
+        f"{_DEST}/orangebox-0.2.0.tar.gz"
+    )
+    assert tar_archive.exists and tar_archive.is_file
+    assert tar_archive.size < 1024
+    assert "version https://git-lfs.github.com/spec" in tar_archive.content_string
