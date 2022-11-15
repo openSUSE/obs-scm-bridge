@@ -103,7 +103,6 @@ class ObsGit(object):
             cmd += [ '--depth', '1' ]
         if include_submodules:
             cmd += [ '--recurse-submodules' ]
-        print(cmd)
         self.run_cmd(cmd, fatal="git fetch")
         cmd = [ 'git', '-C', outdir, 'checkout', '-q', self.revision ]
         self.run_cmd(cmd, fatal="git checkout")
