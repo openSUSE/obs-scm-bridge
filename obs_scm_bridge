@@ -48,17 +48,17 @@ class ObsGit(object):
         self.outdir   = outdir
         self.revision = None
         self.subdir   = None
-        self.lfs = False
         self.keep_meta = False
         self.enforced_deep_clone = False
         self.arch = []
         self.url = list(urllib.parse.urlparse(url))
+        self.no_lfs = False
         # for project level mode
         self.export_files = set(["_config"])
         self.gitsubmodules = set()
         self.revisions = None
 
-        query = urllib.parse.parse_qs(self.url[4]);
+        query = urllib.parse.parse_qs(self.url[4])
         if "subdir" in query:
             self.subdir = query['subdir'][0]
             del query['subdir']
@@ -67,14 +67,14 @@ class ObsGit(object):
             self.arch = query['arch']
             del query['arch']
             self.url[4] = urllib.parse.urlencode(query)
-        if "lfs" in query:
-            self.lfs = True
-            del query['lfs']
-            self.url[4] = urllib.parse.urlencode(query)
         if "keepmeta" in query:
             self.enforced_deep_clone = True
             self.keep_meta = True
             del query['keepmeta']
+            self.url[4] = urllib.parse.urlencode(query)
+        if "lfs" in query:
+            self.no_lfs = query["lfs"] == ["0"]
+            del query["lfs"]
             self.url[4] = urllib.parse.urlencode(query)
         if self.url[5]:
             self.revision = self.url[5]
@@ -130,10 +130,6 @@ class ObsGit(object):
             sys.exit(proc.returncode)
         return (proc.returncode, output)
 
-    def do_lfs(self, outdir):
-        cmd = [ 'git', '-C', outdir, 'lfs', 'fetch' ]
-        self.run_cmd(cmd, fatal="git lfs fetch")
-
     def do_clone_commit(self, outdir, include_submodules=False):
         cmd = [ 'git', 'init', outdir ]
         self.run_cmd(cmd, fatal="git init")
@@ -146,7 +142,8 @@ class ObsGit(object):
             cmd += [ '--recurse-submodules' ]
         self.run_cmd(cmd, fatal="git fetch")
         cmd = [ 'git', '-C', outdir, 'checkout', '-q', self.revision ]
-        self.run_cmd(cmd, fatal="git checkout")
+        env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
+        self.run_cmd(cmd, fatal="git checkout", env=env)
         if include_submodules:
             cmd = [ 'git', '-C', outdir, 'submodule', 'init' ]
             self.run_cmd(cmd, fatal="git submodule init")
@@ -156,8 +153,6 @@ class ObsGit(object):
     def do_clone(self, outdir, shallow, include_submodules=False):
         if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
             self.do_clone_commit(outdir, include_submodules)
-            if self.lfs:
-                self.do_lfs(outdir)
             return
         cmd = [ 'git', 'clone', urllib.parse.urlunparse(self.url), outdir ]
         if include_submodules:
@@ -167,9 +162,8 @@ class ObsGit(object):
         if self.revision:
             cmd.insert(2, '-b')
             cmd.insert(3, self.revision)
-        self.run_cmd(cmd, fatal="git clone")
-        if self.lfs:
-            self.do_lfs(outdir)
+        env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
+        self.run_cmd(cmd, fatal="git clone", env=env)
 
     def clone(self, shallow_clone, include_submodules=False):
         if not self.subdir:

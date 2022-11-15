@@ -31,7 +31,8 @@ Source0:        %{name}-%{version}.tar.xz
 Requires:       %{build_pkg_name} >= 20211125
 BuildArch:      noarch
 Recommends:     python3-packaging
-
+Requires:       git
+Requires:       git-lfs
 
 %description
 
