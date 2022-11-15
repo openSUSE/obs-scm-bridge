@@ -95,7 +95,7 @@ class ObsGit(object):
         cmd = [ 'git', '-C', outdir, 'lfs', 'fetch' ]
         self.run_cmd(cmd, fatal="git lfs fetch")
 
-    def do_clone_commit(self, outdir):
+    def do_clone_commit(self, outdir, include_submodules=False):
         cmd = [ 'git', 'init', outdir ]
         self.run_cmd(cmd, fatal="git init")
         cmd = [ 'git', '-C', outdir, 'remote', 'add', 'origin', urllib.parse.urlunparse(self.url) ]
@@ -103,18 +103,27 @@ class ObsGit(object):
         cmd = [ 'git', '-C', outdir, 'fetch', 'origin', self.revision ]
         if shallow_clone:
             cmd += [ '--depth', '1' ]
+        if include_submodules:
+            cmd += [ '--recurse-submodules' ]
         print(cmd)
         self.run_cmd(cmd, fatal="git fetch")
         cmd = [ 'git', '-C', outdir, 'checkout', '-q', self.revision ]
         self.run_cmd(cmd, fatal="git checkout")
+        if include_submodules:
+            cmd = [ 'git', '-C', outdir, 'submodule', 'init' ]
+            self.run_cmd(cmd, fatal="git submodule init")
+            cmd = [ 'git', '-C', outdir, 'submodule', 'update' ]
+            self.run_cmd(cmd, fatal="git submodule update")
 
-    def do_clone(self, outdir, shallow):
+    def do_clone(self, outdir, shallow, include_submodules=False):
         if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
-            self.do_clone_commit(outdir)
+            self.do_clone_commit(outdir, include_submodules)
             if self.lfs:
                 self.do_lfs(outdir)
             return
         cmd = [ 'git', 'clone', urllib.parse.urlunparse(self.url), outdir ]
+        if include_submodules:
+            cmd += [ '--recurse-submodules' ]
         if shallow:
             cmd += [ '--depth', '1' ]
         if self.revision:
@@ -124,12 +133,12 @@ class ObsGit(object):
         if self.lfs:
             self.do_lfs(outdir)
 
-    def clone(self, shallow_clone):
+    def clone(self, shallow_clone, include_submodules):
         if not self.subdir:
-            self.do_clone(self.outdir, (shallow_clone and not self.enforced_deep_clone))
+            self.do_clone(self.outdir, (shallow_clone and not self.enforced_deep_clone), include_submodules)
             return
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
-        self.do_clone(clonedir, (shallow_clone and not self.enforced_deep_clone))
+        self.do_clone(clonedir, (shallow_clone and not self.enforced_deep_clone), include_submodules)
         fromdir = os.path.join(clonedir, self.subdir)
         if not os.path.realpath(fromdir+'/').startswith(os.path.realpath(clonedir+'/')):
             print("ERROR: subdir is not below clone directory")
@@ -379,10 +388,12 @@ if __name__ == '__main__':
 
     # workflow
     obsgit = ObsGit(outdir, url)
-    obsgit.clone(shallow_clone)
     if project_mode == 'true' or project_mode == '1':
+        obsgit.clone(shallow_clone)
         obsgit.generate_package_xml_files()
         sys.exit(0)
+
+    obsgit.clone(shallow_clone, include_submodules=True)
 
     if pack_directories:
         obsgit.add_service_info()
