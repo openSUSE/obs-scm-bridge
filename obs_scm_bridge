@@ -20,7 +20,7 @@ import logging
 import subprocess
 import tempfile
 from html import escape
-from typing import TYPE_CHECKING, List, Optional, TextIO, Tuple, Union, overload
+from typing import TYPE_CHECKING, Dict, List, Optional, TextIO, Tuple, Union, overload
 if TYPE_CHECKING:
     from typing import Literal
 import urllib.parse
@@ -88,6 +88,7 @@ class ObsGit(object):
             fatal: str,
             cwd: Optional[str]=None,
             stdout: Union[int, TextIO]=subprocess.PIPE,
+            env: Optional[Dict[str, str]]=None,
     ) -> Tuple["Literal[0]", Optional[str]]: ...
 
     @overload
@@ -98,6 +99,7 @@ class ObsGit(object):
             fatal: Optional[str]=None,
             cwd: Optional[str]=None,
             stdout: Union[int, TextIO]=subprocess.PIPE,
+            env: Optional[Dict[str, str]]=None,
     ) -> Tuple[int, Optional[str]]: ...
 
     def run_cmd(
@@ -107,6 +109,7 @@ class ObsGit(object):
             fatal: Optional[str]=None,
             cwd: Optional[str]=None,
             stdout: Union[int, TextIO]=subprocess.PIPE,
+            env: Optional[Dict[str, str]]=None,
     ) -> Tuple[int, Optional[str]]:
         logging.debug("COMMAND: %s" % cmd)
         stderr = subprocess.PIPE
@@ -116,7 +119,8 @@ class ObsGit(object):
                                 shell=False,
                                 stdout=stdout,
                                 stderr=stderr,
-                                cwd=cwd)
+                                cwd=cwd,
+                                env=env)
         std_out = proc.communicate()[0]
         output = std_out.decode() if std_out else None
 
