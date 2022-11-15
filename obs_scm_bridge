@@ -20,6 +20,9 @@ import logging
 import subprocess
 import tempfile
 from html import escape
+from typing import TYPE_CHECKING, List, Optional, TextIO, Tuple, Union, overload
+if TYPE_CHECKING:
+    from typing import Literal
 import urllib.parse
 import configparser
 
@@ -72,7 +75,34 @@ class ObsGit(object):
             self.revision = self.url[5]
             self.url[5] = ''
 
-    def run_cmd(self, cmd, cwd=None, stdout=subprocess.PIPE, fatal=None):
+    @overload
+    def run_cmd(
+            self,
+            cmd: List[str],
+            *,
+            fatal: str,
+            cwd: Optional[str]=None,
+            stdout: Union[int, TextIO]=subprocess.PIPE,
+    ) -> Tuple["Literal[0]", str]: ...
+
+    @overload
+    def run_cmd(
+            self,
+            cmd: List[str],
+            *,
+            fatal: Optional[str]=None,
+            cwd: Optional[str]=None,
+            stdout: Union[int, TextIO]=subprocess.PIPE,
+    ) -> Tuple[int, str]: ...
+
+    def run_cmd(
+            self,
+            cmd: List[str],
+            *,
+            fatal: Optional[str]=None,
+            cwd: Optional[str]=None,
+            stdout: Union[int, TextIO]=subprocess.PIPE,
+    ) -> Tuple[int, str]:
         logging.debug("COMMAND: %s" % cmd)
         stderr = subprocess.PIPE
         if stdout == subprocess.PIPE:
