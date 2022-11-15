@@ -86,9 +86,20 @@ class ObsGit(object):
             *,
             fatal: str,
             cwd: Optional[str]=None,
-            stdout: Union[int, TextIO]=subprocess.PIPE,
+            stdout: int=subprocess.PIPE,
             env: Optional[Dict[str, str]]=None,
-    ) -> Tuple["Literal[0]", Optional[str]]: ...
+    ) -> Tuple["Literal[0]", str]: ...
+
+    @overload
+    def run_cmd(
+            self,
+            cmd: List[str],
+            *,
+            fatal: str,
+            cwd: Optional[str]=None,
+            stdout: TextIO,
+            env: Optional[Dict[str, str]]=None,
+    ) -> Tuple["Literal[0]", None]: ...
 
     @overload
     def run_cmd(
@@ -97,9 +108,20 @@ class ObsGit(object):
             *,
             fatal: Optional[str]=None,
             cwd: Optional[str]=None,
-            stdout: Union[int, TextIO]=subprocess.PIPE,
+            stdout: int=subprocess.PIPE,
             env: Optional[Dict[str, str]]=None,
-    ) -> Tuple[int, Optional[str]]: ...
+    ) -> Tuple[int, str]: ...
+
+    @overload
+    def run_cmd(
+            self,
+            cmd: List[str],
+            *,
+            fatal: Optional[str]=None,
+            cwd: Optional[str]=None,
+            stdout: TextIO,
+            env: Optional[Dict[str, str]]=None,
+    ) -> Tuple[int, None]: ...
 
     def run_cmd(
             self,
