@@ -204,9 +204,8 @@ class ObsGit(object):
             cmd += [ '--unpack', '--noassetdir', '--', self.outdir ]
         self.run_cmd(cmd, fatal="asset download")
 
-    def copyfile(self, src, dst):
-        cmd = [ 'cp', '-af', self.outdir + "/" + src, self.outdir + "/" + dst ]
-        self.run_cmd(cmd, fatal="file copy")
+    def copyfile(self, src: str, dst: str) -> None:
+        shutil.copy2(os.path.join(self.outdir, src), os.path.join(self.outdir, dst))
 
     def export_debian_files(self):
         if os.path.isfile(self.outdir + "/debian/control") and \
