@@ -83,7 +83,7 @@ class ObsGit(object):
             fatal: str,
             cwd: Optional[str]=None,
             stdout: Union[int, TextIO]=subprocess.PIPE,
-    ) -> Tuple["Literal[0]", str]: ...
+    ) -> Tuple["Literal[0]", Optional[str]]: ...
 
     @overload
     def run_cmd(
@@ -93,7 +93,7 @@ class ObsGit(object):
             fatal: Optional[str]=None,
             cwd: Optional[str]=None,
             stdout: Union[int, TextIO]=subprocess.PIPE,
-    ) -> Tuple[int, str]: ...
+    ) -> Tuple[int, Optional[str]]: ...
 
     def run_cmd(
             self,
@@ -102,7 +102,7 @@ class ObsGit(object):
             fatal: Optional[str]=None,
             cwd: Optional[str]=None,
             stdout: Union[int, TextIO]=subprocess.PIPE,
-    ) -> Tuple[int, str]:
+    ) -> Tuple[int, Optional[str]]:
         logging.debug("COMMAND: %s" % cmd)
         stderr = subprocess.PIPE
         if stdout == subprocess.PIPE:
@@ -112,7 +112,9 @@ class ObsGit(object):
                                 stdout=stdout,
                                 stderr=stderr,
                                 cwd=cwd)
-        output = proc.communicate()[0].decode("utf-8")
+        std_out = proc.communicate()[0]
+        output = std_out.decode() if std_out else None
+
         logging.debug("RESULT(%d): %s", proc.returncode, repr(output))
         if fatal and proc.returncode != 0:
             print("ERROR: " + fatal + " failed: ", output)
