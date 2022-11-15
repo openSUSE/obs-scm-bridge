@@ -20,7 +20,7 @@ import logging
 import subprocess
 import tempfile
 from html import escape
-from typing import TYPE_CHECKING, Dict, List, Optional, TextIO, Tuple, Union, overload
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, TextIO, Tuple, Union, overload
 if TYPE_CHECKING:
     from typing import Literal
 import urllib.parse
@@ -43,7 +43,7 @@ if os.environ.get('OSC_VERSION'):
 os.environ['LANG'] = "C"
 
 class ObsGit(object):
-    def __init__(self, outdir, url):
+    def __init__(self, outdir: str, url: str) -> None:
         self.outdir   = outdir
         self.revision = None
         self.subdir   = None
@@ -54,8 +54,8 @@ class ObsGit(object):
         self.no_lfs = False
         # for project level mode
         self.export_files = set(["_config"])
-        self.gitsubmodules = set()
-        self.revisions = None
+        self.gitsubmodules: Set[str] = set()
+        self.revisions: Optional[Dict[str, str]] = None
 
         query = urllib.parse.parse_qs(self.url[4])
         if "subdir" in query:
@@ -129,7 +129,7 @@ class ObsGit(object):
             sys.exit(proc.returncode)
         return (proc.returncode, output)
 
-    def do_clone_commit(self, outdir, include_submodules=False):
+    def do_clone_commit(self, outdir: str, include_submodules: bool=False) -> None:
         cmd = [ 'git', 'init', outdir ]
         self.run_cmd(cmd, fatal="git init")
         cmd = [ 'git', '-C', outdir, 'remote', 'add', 'origin', urllib.parse.urlunparse(self.url) ]
@@ -149,7 +149,7 @@ class ObsGit(object):
             cmd = [ 'git', '-C', outdir, 'submodule', 'update' ]
             self.run_cmd(cmd, fatal="git submodule update")
 
-    def do_clone(self, outdir, shallow, include_submodules=False):
+    def do_clone(self, outdir: str, shallow: bool, include_submodules: bool=False) -> None:
         if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
             self.do_clone_commit(outdir, include_submodules)
             return
@@ -164,7 +164,7 @@ class ObsGit(object):
         env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
         self.run_cmd(cmd, fatal="git clone", env=env)
 
-    def clone(self, shallow_clone, include_submodules=False):
+    def clone(self, shallow_clone: bool, include_submodules: bool=False) -> None:
         if not self.subdir:
             self.do_clone(self.outdir, (shallow_clone and not self.enforced_deep_clone), include_submodules)
             return
@@ -183,19 +183,19 @@ class ObsGit(object):
             shutil.move(os.path.join(fromdir, name), self.outdir)
         shutil.rmtree(clonedir)
 
-    def fetch_tags(self):
+    def fetch_tags(self) -> None:
         cmd = [ 'git', '-C', self.outdir, 'fetch', '--tags', 'origin', '+refs/heads/*:refs/remotes/origin/*' ]
         logging.info("fetching all tags")
         self.run_cmd(cmd, fatal="fetch --tags")
 
-    def cpio_directory(self, directory):
+    def cpio_directory(self, directory: str) -> None:
         logging.info("create archivefile for %s", directory)
         cmd = [ download_assets, '--create-cpio', '--', directory ]
         archivefile = open(directory + '.obscpio', 'w')
         self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
         archivefile.close()
 
-    def cpio_specials(self, specials):
+    def cpio_specials(self, specials: List[str]) -> None:
         if not specials:
             return
         logging.info("create archivefile for specials")
@@ -204,7 +204,7 @@ class ObsGit(object):
         self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
         archivefile.close()
 
-    def cpio_directories(self):
+    def cpio_directories(self) -> None:
         logging.debug("walk via %s", self.outdir)
         os.chdir(self.outdir)
         listing = sorted(os.listdir("."))
@@ -233,7 +233,7 @@ class ObsGit(object):
                 else:
                     os.unlink(name)
 
-    def get_assets(self):
+    def get_assets(self) -> None:
         logging.info("downloading assets")
         cmd = [ download_assets ]
         for arch in self.arch:
@@ -247,7 +247,7 @@ class ObsGit(object):
     def copyfile(self, src: str, dst: str) -> None:
         shutil.copy2(os.path.join(self.outdir, src), os.path.join(self.outdir, dst))
 
-    def export_debian_files(self):
+    def export_debian_files(self) -> None:
         if os.path.isfile(self.outdir + "/debian/control") and \
                 not os.path.isfile(self.outdir + "/debian.control"):
             self.copyfile("debian/control", "debian.control")
@@ -255,7 +255,7 @@ class ObsGit(object):
                 not os.path.isfile(self.outdir + "/debian.changelog"):
             self.copyfile("debian/changelog", "debian.changelog")
 
-    def get_debian_origtar(self):
+    def get_debian_origtar(self) -> None:
         if os.path.isfile(self.outdir + "/debian/control"):
             # need up get all tags 
             if not self.subdir:
@@ -264,16 +264,16 @@ class ObsGit(object):
             logging.info("exporting debian origtar")
             self.run_cmd(cmd, fatal="debian origtar export")
 
-    def get_subdir_info(self, dir):
+    def get_subdir_info(self, dir: str) -> str:
         cmd = [ download_assets, '--show-dir-srcmd5', '--', dir ]
         rcode, info = self.run_cmd(cmd, fatal="download_assets --show-dir-srcmd5")
         return info.strip()
 
-    def write_info_file(self, filename, info):
+    def write_info_file(self, filename: str, info: str) -> None:
         with open(filename, 'w') as infofile:
             infofile.write(info + '\n')
 
-    def add_service_info(self):
+    def add_service_info(self) -> None:
         info = None
         if self.subdir:
             info = self.get_subdir_info(self.outdir)
@@ -290,7 +290,7 @@ class ObsGit(object):
   <scmsync>{escape(url)}</scmsync>
 </package>""")
 
-    def list_submodule_revisions(self):
+    def list_submodule_revisions(self) -> None:
         self.revisions = {}
         cmd = [ 'git', 'ls-tree', 'HEAD', '.' ]
         rcode, output = self.run_cmd(cmd, fatal="git ls-tree")
@@ -298,8 +298,8 @@ class ObsGit(object):
             lstree = line.split(maxsplit=4)
             if lstree[1] == 'commit' and len(lstree[2]) >= 40:
                 self.revisions[lstree[3]] = lstree[2]
-           
-    def process_package_submodule(self, gsmsection, package_name=None):
+
+    def process_package_submodule(self, gsmsection: configparser.SectionProxy, package_name: Optional[str]=None) -> None:
         path = gsmsection['path']
         url = gsmsection['url']
         if not package_name:
@@ -312,6 +312,7 @@ class ObsGit(object):
         # find revision of submodule
         if not self.revisions:
             self.list_submodule_revisions()
+        assert self.revisions, "self.revisions must not be None after calling self.list_submodule_revisions"
         revision = self.revisions.get(path, None)
         if not revision:
             logging.error("Could not determine revision of submodule for " + path)
@@ -339,7 +340,7 @@ class ObsGit(object):
         self.export_files.add(package_name + ".xml")
         self.export_files.add(package_name + ".info")
 
-    def process_package_subdirectory(self, directory):
+    def process_package_subdirectory(self, directory: str) -> None:
         info = self.get_subdir_info(directory)
         shutil.rmtree(directory)
         if not regexp.match(directory):
@@ -359,7 +360,7 @@ class ObsGit(object):
 
         self.write_package_xml_file(directory, urllib.parse.urlunparse(url))
 
-    def generate_package_xml_files(self):
+    def generate_package_xml_files(self) -> None:
         logging.debug("walk via %s", self.outdir)
         os.chdir(self.outdir)
 
