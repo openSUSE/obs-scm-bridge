@@ -133,7 +133,7 @@ class ObsGit(object):
         if self.lfs:
             self.do_lfs(outdir)
 
-    def clone(self, shallow_clone, include_submodules):
+    def clone(self, shallow_clone, include_submodules=False):
         if not self.subdir:
             self.do_clone(self.outdir, (shallow_clone and not self.enforced_deep_clone), include_submodules)
             return
