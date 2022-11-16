@@ -50,6 +50,11 @@ class ObsGit(object):
         self.enforced_deep_clone = False
         self.arch = []
         self.url = list(urllib.parse.urlparse(url))
+        # for project level mode
+        self.export_files = set(["_config"])
+        self.gitsubmodules = set()
+        self.revisions = None
+
         query = urllib.parse.parse_qs(self.url[4]);
         if "subdir" in query:
             self.subdir = query['subdir'][0]
@@ -105,7 +110,6 @@ class ObsGit(object):
             cmd += [ '--depth', '1' ]
         if include_submodules:
             cmd += [ '--recurse-submodules' ]
-        print(cmd)
         self.run_cmd(cmd, fatal="git fetch")
         cmd = [ 'git', '-C', outdir, 'checkout', '-q', self.revision ]
         self.run_cmd(cmd, fatal="git checkout")
@@ -260,70 +264,107 @@ class ObsGit(object):
 </package>""")
 
     def list_submodule_revisions(self):
-        revisions = {}
+        self.revisions = {}
         cmd = [ 'git', 'ls-tree', 'HEAD', '.' ]
         rcode, output = self.run_cmd(cmd, fatal="git ls-tree")
         for line in output.splitlines():
             lstree = line.split(maxsplit=4)
             if lstree[1] == 'commit' and len(lstree[2]) >= 40:
-                revisions[lstree[3]] = lstree[2]
-        return revisions
+                self.revisions[lstree[3]] = lstree[2]
            
+    def process_package_submodule(self, gsmsection, package_name=None):
+        path = gsmsection['path']
+        url = gsmsection['url']
+        if not package_name:
+            package_name = path
+
+        if '/' in path:
+            # we handle only top level submodules in project mode
+            return
+
+        # find revision of submodule
+        if not self.revisions:
+            self.list_submodule_revisions()
+        revision = self.revisions.get(path, None)
+        if not revision:
+            logging.error("Could not determine revision of submodule for " + path)
+            sys.exit(1)
+
+        # all good, write xml file and register the module
+        self.gitsubmodules.add(path)
+        url = list(urllib.parse.urlparse(url))
+        url[5] = revision
+        if self.arch:
+            query = urllib.parse.parse_qs(url[4]);
+            query['arch'] = self.arch
+            url[4] = urllib.parse.urlencode(query)
+
+        # handle relative urls in submodules
+        unparsed_url = urllib.parse.urlunparse(url)
+        if ".." == unparsed_url[0:2]:
+            # need to append a '/' to the base url so that the relative
+            # path is properly resolved, otherwise we might descend one
+            # directory too far
+            unparsed_url = urllib.parse.urljoin(urllib.parse.urlunparse(self.url) +"/", unparsed_url)
+
+        self.write_package_xml_file(package_name, unparsed_url)
+        self.write_info_file(package_name + ".info", revision)
+        self.export_files.add(package_name + ".xml")
+        self.export_files.add(package_name + ".info")
+
+    def process_package_subdirectory(self, directory):
+        info = self.get_subdir_info(directory)
+        shutil.rmtree(directory)
+        if not regexp.match(directory):
+            logging.warn("directory name contains invalid char: " + name)
+            return
+
+        # add subdir info file
+        self.write_info_file(directory + ".info", info)
+
+        # add subdir parameter to url
+        url = self.url
+        query = urllib.parse.parse_qs(url[4])
+        query['subdir'] = directory
+        url[4] = urllib.parse.urlencode(query)
+        if self.revision:
+            self.url[5] = self.revision
+
+        self.write_package_xml_file(directory, urllib.parse.urlunparse(url))
+
     def generate_package_xml_files(self):
         logging.debug("walk via %s", self.outdir)
         os.chdir(self.outdir)
-        export_files = set(["_config"])
 
         # find all top level git submodules
-        gitsubmodules = set()
+        gsmconfig = None
         if os.path.isfile('.gitmodules'):
             gsmconfig = configparser.ConfigParser()
             gsmconfig.read('.gitmodules')
-            revisions = None
             for section in gsmconfig.sections():
                 if not 'path' in gsmconfig[section]:
                     logging.warn("path not defined for git submodule " + section)
-                    continue
+                    return
                 if not 'url' in gsmconfig[section]:
                     logging.warn("url not defined for git submodule " + section)
+                    return
+                self.process_package_submodule(gsmconfig[section])
+
+        # handle plain files and directories
+        listing = sorted(os.listdir("."))
+        regexp =  re.compile(r"^[a-zA-Z0-9\.\-\_\+]*$");
+        for name in listing:
+            if os.path.islink(name):
+                target = os.readlink(name) # this is no recursive lookup, but is there a usecase?
+                if '/' in target:
+                    logging.warn("only local links are supported, skipping: " + name)
                     continue
-                path = gsmconfig[section]['path']
-                url = gsmconfig[section]['url']
-
-                if '/' in path:
-                    # we handle only top level submodules in project mode
-                    continue
-
-                # find revision of submodule
-                if revisions is None:
-                    revisions = self.list_submodule_revisions()
-                revision = revisions.get(path, None)
-                if not revision:
-                    logging.error("Could not determine revision of submodule " + section)
-                    sys.exit(1)
-
-                # all good, write xml file and register the module
-                gitsubmodules.add(path)
-                url = list(urllib.parse.urlparse(url))
-                url[5] = revision
-                if self.arch:
-                    query = urllib.parse.parse_qs(url[4]);
-                    query['arch'] = self.arch
-                    url[4] = urllib.parse.urlencode(query)
-
-                # handle relative urls in submodules
-                unparsed_url = urllib.parse.urlunparse(url)
-                if ".." == unparsed_url[0:2]:
-                    # need to append a '/' to the base url so that the relative
-                    # path is properly resolved, otherwise we might descend one
-                    # directory too far
-                    unparsed_url = urllib.parse.urljoin(urllib.parse.urlunparse(self.url) +"/", unparsed_url)
-
-                self.write_package_xml_file(path, unparsed_url)
-                self.write_info_file(path + ".info", revision)
-                export_files.add(path + ".xml")
-                export_files.add(path + ".info")
-                shutil.rmtree(path)
+                if target in self.gitsubmodules:
+                    self.process_package_submodule(gsmconfig["submodule \""+target+"\""], name)
+                    os.unlink(name)
+                else:
+                    logging.debug("skipping symlink to a non git submodule %s -> %s", name, target)
+                    os.unlink(name)
 
         # handle plain files and directories
         listing = sorted(os.listdir("."))
@@ -332,30 +373,16 @@ class ObsGit(object):
             if name == '.git' and not self.keep_meta:
                 shutil.rmtree(name)
                 continue
-            if os.path.isdir(name):
-                if name in gitsubmodules:
+            if os.path.islink(name):
+                continue
+            elif os.path.isdir(name):
+                if name in self.gitsubmodules:
                     # already handled as git submodule
+                    shutil.rmtree(name)
                     continue
-                info = self.get_subdir_info(name)
-                shutil.rmtree(name)
-                if not regexp.match(name):
-                    logging.warn("directory name contains invalid char: " + name)
-                    continue
-
-                # add subdir info file
-                self.write_info_file(name + ".info", info)
-
-                # add subdir parameter to url
-                url = self.url
-                query = urllib.parse.parse_qs(url[4])
-                query['subdir'] = name
-                url[4] = urllib.parse.urlencode(query)
-                if self.revision:
-                    self.url[5] = self.revision
-
-                self.write_package_xml_file(name, urllib.parse.urlunparse(url))
+                self.process_package_subdirectory(name)
             else:
-                if not name in export_files:
+                if not name in self.export_files:
                     os.unlink(name)
 
 if __name__ == '__main__':
