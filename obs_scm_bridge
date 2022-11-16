@@ -43,6 +43,9 @@ if os.environ.get('OSC_VERSION'):
 os.environ['LANG'] = "C"
 
 class ObsGit(object):
+
+    _REGEXP = re.compile(r"^[a-zA-Z0-9\.\-\_\+]*$");
+
     def __init__(self, outdir: str, url: str) -> None:
         self.outdir   = outdir
         self.revision = None
@@ -366,8 +369,8 @@ class ObsGit(object):
     def process_package_subdirectory(self, directory: str) -> None:
         info = self.get_subdir_info(directory)
         shutil.rmtree(directory)
-        if not regexp.match(directory):
-            logging.warn("directory name contains invalid char: " + name)
+        if not self._REGEXP.match(directory):
+            logging.warn("directory name contains invalid char: %s", directory)
             return
 
         # add subdir info file
@@ -403,7 +406,6 @@ class ObsGit(object):
 
         # handle plain files and directories
         listing = sorted(os.listdir("."))
-        regexp =  re.compile(r"^[a-zA-Z0-9\.\-\_\+]*$");
         for name in listing:
             if os.path.islink(name):
                 target = os.readlink(name) # this is no recursive lookup, but is there a usecase?
@@ -419,7 +421,6 @@ class ObsGit(object):
 
         # handle plain files and directories
         listing = sorted(os.listdir("."))
-        regexp =  re.compile(r"^[a-zA-Z0-9\.\-\_\+]*$");
         for name in listing:
             if name == '.git' and not self.keep_meta:
                 shutil.rmtree(name)
