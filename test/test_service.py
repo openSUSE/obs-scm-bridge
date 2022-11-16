@@ -1,4 +1,5 @@
 from itertools import product
+from typing import Optional
 
 import xml.etree.ElementTree as ET
 
@@ -12,8 +13,10 @@ _RPMS_DIR = "/src/rpms/"
 _AAA_BASE_URL = "https://github.com/openSUSE/aaa_base"
 _LIBECONF_URL = "https://github.com/openSUSE/libeconf"
 
-CONTAINERFILE = f"""RUN zypper -n in python3 git build diff && \
-    . /etc/os-release && [[ ${{NAME}} = "SLES" ]] || zypper -n in git-lfs
+CONTAINERFILE = f"""RUN set -eux; \
+    zypper -n in python3 git build diff; \
+    . /etc/os-release && [[ ${{NAME}} = "SLES" ]] || zypper -n in git-lfs; \
+    for recom in $(rpm -q --recommends build|grep ^perl); do zypper -n in $recom; done
 
 RUN git config --global user.name "SUSE Bot" && \
     git config --global user.email "noreply@suse.com" && \
@@ -57,14 +60,14 @@ _OBS_SCM_BRIDGE_CMD = "obs_scm_bridge --debug 1"
 
 def test_service_help(auto_container: ContainerData):
     """This is just a simple smoke test to check whether the script works."""
-    auto_container.connection.run_expect([0], "obs_scm_bridge --help")
+    auto_container.connection.run_expect([0], f"{_OBS_SCM_BRIDGE_CMD} --help")
 
 
 def test_clones_the_repository(auto_container_per_test: ContainerData):
     """Check that the service clones the manually created repository correctly."""
     dest = "/tmp/ring0"
     auto_container_per_test.connection.run_expect(
-        [0], f"obs_scm_bridge --outdir {dest} --url {_RPMS_DIR}ring0"
+        [0], f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} --url {_RPMS_DIR}ring0"
     )
     auto_container_per_test.connection.run_expect([0], f"diff {dest} {_RPMS_DIR}ring0")
 
@@ -80,7 +83,8 @@ def test_creates_packagelist(auto_container_per_test: ContainerData):
     """
     dest = "/tmp/ring0"
     auto_container_per_test.connection.run_expect(
-        [0], f"obs_scm_bridge --outdir {dest} --url {_RPMS_DIR}ring0 --projectmode 1"
+        [0],
+        f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} --url {_RPMS_DIR}ring0 --projectmode 1",
     )
     libeconf_hash, aaa_base_hash = (
         auto_container_per_test.connection.file(
@@ -159,3 +163,67 @@ def test_lfs_opt_out(auto_container_per_test: ContainerData, fragment: str):
     assert tar_archive.exists and tar_archive.is_file
     assert tar_archive.size < 1024
     assert "version https://git-lfs.github.com/spec" in tar_archive.content_string
+
+
+@pytest.mark.parametrize(
+    "git_repo_url,expected_head",
+    [
+        (f"{_LIBECONF_URL}{fragment}", commit)
+        for fragment, commit in (
+            ("", None),
+            ("#master", None),
+            (f"{pref}892dc9b83009c859ecfde218566a242241b95ad7" for pref in ("#", "")),
+            ("#v0.4.5", "c9658f240b5c6d8d85f52f5019e47bc29c88b83f"),
+        )
+    ],
+)
+def test_clone_commit(
+    auto_container_per_test: ContainerData,
+    git_repo_url: str,
+    expected_head: Optional[str],
+):
+    """Check that the service can clone libeconf at certain commits/branches or
+    tags and verify that `HEAD` is at the correct commit.
+
+    """
+    _DEST = "/tmp/libeconf"
+    auto_container_per_test.connection.run_expect(
+        [0], f"{_OBS_SCM_BRIDGE_CMD} --outdir {_DEST} --url {git_repo_url}"
+    )
+
+    head = auto_container_per_test.connection.run_expect(
+        [0], f"git -C {_DEST} rev-parse HEAD"
+    ).stdout.strip()
+
+    if expected_head:
+        assert head == expected_head
+    else:
+        libeconf_hash = auto_container_per_test.connection.file(
+            "/src/libeconf"
+        ).content_string.strip()
+        assert libeconf_hash == head
+
+
+@pytest.mark.parametrize(
+    "env_var,shallow",
+    [("", True), ("OSC_VERSION=1", False)],
+)
+def test_fetch_depth(
+    auto_container_per_test: ContainerData, env_var: str, shallow: bool
+):
+    _DEST = "/tmp/libeconf"
+    auto_container_per_test.connection.run_expect(
+        [0], f"{env_var} {_OBS_SCM_BRIDGE_CMD} --outdir {_DEST} --url {_LIBECONF_URL}"
+    )
+
+    history_length = len(
+        auto_container_per_test.connection.run_expect(
+            [0], f"git -C {_DEST} log --oneline"
+        )
+        .stdout.strip()
+        .splitlines()
+    )
+    if shallow:
+        assert history_length == 1
+    else:
+        assert history_length > 1
