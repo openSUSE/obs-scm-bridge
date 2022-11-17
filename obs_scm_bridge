@@ -288,8 +288,19 @@ class ObsGit(object):
     def write_package_xml_file(self, name: str, url: str) -> None:
         with open(f"{name}.xml", 'w') as xmlfile:
             xmlfile.write(f"""<package name="{escape(name)}">
+  <bcntsynctag>{escape(name)}</bcntsynctag>
   <scmsync>{escape(url)}</scmsync>
 </package>""")
+
+    def write_package_xml_local_link(self, target: str, name: str) -> None:
+        with open(f"{name}.xml", 'w') as xmlfile:
+            xmlfile.write(f"""<package name="{escape(name)}">
+  <bcntsynctag>{escape(target)}</bcntsynctag>
+</package>""")
+        self.export_files.add(name + ".xml")
+        with open(f"{name}.link", 'w') as linkfile:
+            linkfile.write(f"""<link package="{escape(target)}" cicount="copy" />""")
+        self.export_files.add(name + ".link")
 
     def list_submodule_revisions(self):
         self.revisions = {}
@@ -387,8 +398,8 @@ class ObsGit(object):
                 if '/' in target:
                     logging.warn("only local links are supported, skipping: " + name)
                     continue
-                if target in self.gitsubmodules:
-                    self.process_package_submodule(gsmconfig["submodule \""+target+"\""], name)
+                if target in self.gitsubmodules or os.path.isdir(target):
+                    self.write_package_xml_local_link(target, name)
                     os.unlink(name)
                 else:
                     logging.debug("skipping symlink to a non git submodule %s -> %s", name, target)
