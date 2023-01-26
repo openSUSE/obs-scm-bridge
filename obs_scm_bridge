@@ -164,7 +164,10 @@ class ObsGit(object):
         if shallow_clone:
             cmd += [ '--depth', '1' ]
         if include_submodules:
-            cmd += [ '--recurse-submodules' ]
+            if self.subdir:
+               cmd += [ "--recurse-submodules=" + self.subdir ]
+            else:
+               cmd += [ '--recurse-submodules' ]
         self.run_cmd(cmd, fatal="git fetch")
         cmd = [ 'git', '-C', outdir, 'checkout', '-q', self.revision ]
         env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
@@ -181,7 +184,10 @@ class ObsGit(object):
             return
         cmd = [ 'git', 'clone', urllib.parse.urlunparse(self.url), outdir ]
         if include_submodules:
-            cmd += [ '--recurse-submodules' ]
+            if self.subdir:
+               cmd += [ "--recurse-submodules=" + self.subdir ]
+            else:
+               cmd += [ '--recurse-submodules' ]
         if shallow:
             cmd += [ '--depth', '1' ]
         if self.revision:
@@ -237,9 +243,7 @@ class ObsGit(object):
         specials = []
         for name in listing:
             if name == '.git' and not self.keep_meta:
-                print("remove META")
                 # we do not store git meta data by default to avoid bloat storage
-                shutil.rmtree(name)
                 continue
             if name[0:1] == '.':
                 specials.append(name)
