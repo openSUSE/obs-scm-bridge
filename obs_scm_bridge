@@ -435,7 +435,7 @@ class ObsGit(object):
         listing = sorted(os.listdir("."))
         for name in listing:
             if os.path.islink(name):
-                target = os.readlink(name) # this is no recursive lookup, but is there a usecase?
+                target = os.readlink(name).rstrip('/') # this is no recursive lookup, but is there a usecase?
                 if '/' in target:
                     logging.warn("only local links are supported, skipping: " + name)
                     continue
