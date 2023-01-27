@@ -203,6 +203,18 @@ class ObsGit(object):
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
         self.do_clone(clonedir, (shallow_clone and not self.enforced_deep_clone), include_submodules)
         fromdir = os.path.join(clonedir, self.subdir)
+        if os.path.islink(fromdir):
+            target = os.readlink(fromdir).rstrip('/') # this is no recursive lookup, but is there a usecase?
+            if '/' in target:
+                print("ERROR: only local links are supported: " + self.subdir)
+                sys.exit(1)
+            # switch subdir and clone again
+            self.subdir=target
+            shutil.rmtree(clonedir)
+            clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
+            fromdir = os.path.join(clonedir, self.subdir)
+            self.do_clone(clonedir, (shallow_clone and not self.enforced_deep_clone), include_submodules)
+
         if not os.path.realpath(fromdir+'/').startswith(os.path.realpath(clonedir+'/')):
             print("ERROR: subdir is not below clone directory")
             sys.exit(1)
