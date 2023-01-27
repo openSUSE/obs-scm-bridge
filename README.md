@@ -29,17 +29,15 @@ element inside the package meta.
 <scmsync>https://github.com/foo/bar</scmsync>
 ```
 
-For doing a local checkout use the currently experimental osc from
-
-  https://download.opensuse.org/repositories/home:/adrianSuSE:/OBSGIT/
-
-This version allows you to do
+For doing a local checkout use a 1.0 release candidate of osc. This version allows
+you to do
 
 # osc co $project <$package>
 
 which will create a git repository inside of the classic osc checkout.
 
-The only further tested functionality is to do local builds atm.
+It also supports local building, but you need to use git for any source
+modification or operation.
 
 HOWTO manage an entire project
 ==============================
