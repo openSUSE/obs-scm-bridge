@@ -11,8 +11,8 @@ packages = [{include = "obs_scm_bridge"}]
 python = ">=3.6.2,<4.0"
 
 [tool.poetry.group.dev.dependencies]
-pytest-container = "^0.0.2"
-pytest-xdist = "^3.0.2"
+pytest-container = { git = "https://github.com/dcermak/pytest_container.git", branch = "main" }
+pytest-xdist = ">=3.0"
 
 [build-system]
 requires = ["poetry-core"]
