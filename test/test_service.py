@@ -73,6 +73,25 @@ def test_clones_the_repository(auto_container_per_test: ContainerData):
     auto_container_per_test.connection.run_expect([0], f"diff {dest} {_RPMS_DIR}ring0")
 
 
+@pytest.mark.parametrize("container_per_test", CONTAINER_IMAGES, indirect=True)
+@pytest.mark.parametrize(
+    "fragment",
+    (
+        "",
+        "#main",
+        # sha of the 0.3.0 release tag
+        "#9907826c17ca7b650c4040e9c2b45bfef4d9821f",
+    ),
+)
+def test_clones_subdir(container_per_test: ContainerData, fragment: str):
+    dest = "/tmp/scm-bridge/"
+    container_per_test.connection.run_expect(
+        [0],
+        f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} "
+        f"--url https://github.com/openSUSE/obs-scm-bridge?subdir=test{fragment}",
+    )
+
+
 def test_creates_packagelist(auto_container_per_test: ContainerData):
     """Smoke test for the generation of the package list files `$pkg_name.xml`
     and `$pkg_name.info`:
