@@ -32,6 +32,7 @@ RUN mkdir -p {_RPMS_DIR}ring0 && \
     cd aaa_base && git rev-parse HEAD > /src/aaa_base
 
 COPY obs_scm_bridge /usr/bin/
+RUN chmod +x /usr/bin/obs_scm_bridge
 """
 
 TUMBLEWEED = DerivedContainer(
@@ -70,6 +71,25 @@ def test_clones_the_repository(auto_container_per_test: ContainerData):
         [0], f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} --url {_RPMS_DIR}ring0"
     )
     auto_container_per_test.connection.run_expect([0], f"diff {dest} {_RPMS_DIR}ring0")
+
+
+@pytest.mark.parametrize("container_per_test", CONTAINER_IMAGES, indirect=True)
+@pytest.mark.parametrize(
+    "fragment",
+    (
+        "",
+        "#main",
+        # sha of the 0.3.0 release tag
+        "#9907826c17ca7b650c4040e9c2b45bfef4d9821f",
+    ),
+)
+def test_clones_subdir(container_per_test: ContainerData, fragment: str):
+    dest = "/tmp/scm-bridge/"
+    container_per_test.connection.run_expect(
+        [0],
+        f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} "
+        f"--url https://github.com/openSUSE/obs-scm-bridge?subdir=test{fragment}",
+    )
 
 
 def test_creates_packagelist(auto_container_per_test: ContainerData):
