@@ -164,11 +164,12 @@ class ObsGit(object):
         if shallow_clone:
             cmd += [ '--depth', '1' ]
         if include_submodules:
-            if self.subdir:
-               cmd += [ "--recurse-submodules=" + self.subdir ]
-            else:
+            # try to select specific submodule first when a subdir is given and fall back
+            if self.subdir is None or self.run_cmd(cmd + [ "--recurse-submodules=" + self.subdir ])[0] != 0:
                cmd += [ '--recurse-submodules' ]
-        self.run_cmd(cmd, fatal="git fetch")
+               self.run_cmd(cmd, fatal="git fetch")
+        else:
+            self.run_cmd(cmd, fatal="git fetch")
         cmd = [ 'git', '-C', outdir, 'checkout', '-q', self.revision ]
         env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
         self.run_cmd(cmd, fatal="git checkout", env=env)
