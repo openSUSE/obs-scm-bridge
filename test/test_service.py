@@ -32,6 +32,7 @@ RUN mkdir -p {_RPMS_DIR}ring0 && \
     cd aaa_base && git rev-parse HEAD > /src/aaa_base
 
 COPY obs_scm_bridge /usr/bin/
+RUN chmod +x /usr/bin/obs_scm_bridge
 """
 
 TUMBLEWEED = DerivedContainer(
