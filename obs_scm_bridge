@@ -197,9 +197,25 @@ class ObsGit(object):
         env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
         self.run_cmd(cmd, fatal="git clone", env=env)
 
+    # the _scmsync.obsinfo file might become obsolete again when we store entire
+    # git history by default later.
+    def write_obsinfo(self, outdir: str) -> None:
+        cmd = [ 'git', 'rev-parse', 'HEAD' ]
+        _, line = self.run_cmd(cmd, cwd=outdir, fatal="git rev-parse")
+        commit = line[1].rstrip()
+        cmd = [ 'git', 'log', '-n1', '--date=format:%Y%m%d', '--no-show-signature', '--pretty=format:%ct' ]
+        _, line = self.run_cmd(cmd, cwd=outdir, fatal="git rev-parse")
+        tstamp = line[1].rstrip()
+
+        infofile = os.path.join(outdir, '_scmsync.obsinfo')
+        with open(infofile, "w") as obsinfo:
+            obsinfo.write("mtime: " + str(tstamp) + "\n")
+            obsinfo.write("commit: " + commit + "\n")
+
     def clone(self, shallow_clone: bool, include_submodules: bool=False) -> None:
         if not self.subdir:
             self.do_clone(self.outdir, (shallow_clone and not self.enforced_deep_clone), include_submodules)
+            self.write_obsinfo(self.outdir)
             return
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
         self.do_clone(clonedir, (shallow_clone and not self.enforced_deep_clone), include_submodules)
@@ -215,6 +231,7 @@ class ObsGit(object):
             clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
             fromdir = os.path.join(clonedir, self.subdir)
             self.do_clone(clonedir, (shallow_clone and not self.enforced_deep_clone), include_submodules)
+            self.write_obsinfo(clonedir)
 
         if not os.path.realpath(fromdir+'/').startswith(os.path.realpath(clonedir+'/')):
             print("ERROR: subdir is not below clone directory")
