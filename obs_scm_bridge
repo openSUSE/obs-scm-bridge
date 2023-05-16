@@ -272,7 +272,7 @@ class ObsGit(object):
         listing = sorted(os.listdir("."))
         specials = []
         for name in listing:
-            if name == '.git' and not self.keep_meta:
+            if (name == '.git' or name == '.gitattributes') and not self.keep_meta:
                 # we do not store git meta data by default to avoid bloat storage
                 continue
             if name[0:1] == '.':
