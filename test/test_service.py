@@ -63,15 +63,15 @@ def test_service_help(auto_container: ContainerData):
     """This is just a simple smoke test to check whether the script works."""
     auto_container.connection.run_expect([0], f"{_OBS_SCM_BRIDGE_CMD} --help")
 
-
 def test_clones_the_repository(auto_container_per_test: ContainerData):
     """Check that the service clones the manually created repository correctly."""
     dest = "/tmp/ring0"
     auto_container_per_test.connection.run_expect(
         [0], f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} --url {_RPMS_DIR}ring0"
     )
+    # delete _scmsync.obsinfo so that the diff succeeds
+    auto_container_per_test.connection.run_expect([0], f"rm {dest}/_scmsync.obsinfo")
     auto_container_per_test.connection.run_expect([0], f"diff {dest} {_RPMS_DIR}ring0")
-
 
 @pytest.mark.parametrize("container_per_test", CONTAINER_IMAGES, indirect=True)
 @pytest.mark.parametrize(
