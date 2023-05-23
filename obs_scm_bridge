@@ -113,7 +113,7 @@ class ObsGit(object):
             stdout: Union[int, TextIO]=subprocess.PIPE,
             env: Optional[Dict[str, str]]=None,
     ) -> str:
-        (returncode, output) = self.run_cmd_nonfatal(cmd, cwd=cwd, stdout=stdout, env=env)
+        returncode, output = self.run_cmd_nonfatal(cmd, cwd=cwd, stdout=stdout, env=env)
         if returncode != 0:
             print("ERROR: " + fatal + " failed: ", output)
             sys.exit(returncode)
