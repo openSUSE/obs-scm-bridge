@@ -79,6 +79,9 @@ class ObsGit(object):
         if self.url[5]:
             self.revision = self.url[5]
             self.url[5] = ''
+        # if we keep the meta files we always want a deep clone
+        if self.keep_meta:
+            shallow_clone = False
         # scmtoolurl is the url we pass to the the scm tool
         scmtoolurl = self.url.copy()
         if scmtoolurl[0] and scmtoolurl[0][0:4] == 'git+':
@@ -149,9 +152,9 @@ class ObsGit(object):
             cmd = [ 'git', '-C', outdir, 'submodule', 'update' ]
             self.run_cmd(cmd, fatal="git submodule update")
 
-    def do_clone(self, outdir: str, shallow: bool, include_submodules: bool=False) -> None:
+    def do_clone(self, outdir: str, include_submodules: bool=False) -> None:
         if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
-            self.do_clone_commit(outdir, include_submodules)
+            self.do_clone_commit(outdir, include_submodules=include_submodules)
             return
         cmd = [ 'git', 'clone', urllib.parse.urlunparse(self.scmtoolurl), outdir ]
         if include_submodules:
@@ -159,7 +162,7 @@ class ObsGit(object):
                cmd += [ "--recurse-submodules=" + self.subdir ]
             else:
                cmd += [ '--recurse-submodules' ]
-        if shallow:
+        if shallow_clone:
             cmd += [ '--depth', '1' ]
         if self.revision:
             cmd.insert(2, '-b')
@@ -181,13 +184,13 @@ class ObsGit(object):
             obsinfo.write("mtime: " + tstamp + "\n")
             obsinfo.write("commit: " + commit + "\n")
 
-    def clone(self, shallow_clone: bool, include_submodules: bool=False) -> None:
+    def clone(self, include_submodules: bool=False) -> None:
         if not self.subdir:
-            self.do_clone(self.outdir, (shallow_clone and not self.enforced_deep_clone), include_submodules)
+            self.do_clone(self.outdir, include_submodules=include_submodules)
             self.write_obsinfo(self.outdir)
             return
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
-        self.do_clone(clonedir, (shallow_clone and not self.enforced_deep_clone), include_submodules)
+        self.do_clone(clonedir, include_submodules=include_submodules)
         fromdir = os.path.join(clonedir, self.subdir)
         if os.path.islink(fromdir):
             target = os.readlink(fromdir).rstrip('/') # this is no recursive lookup, but is there a usecase?
@@ -199,7 +202,7 @@ class ObsGit(object):
             shutil.rmtree(clonedir)
             clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
             fromdir = os.path.join(clonedir, self.subdir)
-            self.do_clone(clonedir, (shallow_clone and not self.enforced_deep_clone), include_submodules)
+            self.do_clone(clonedir, include_submodules=include_submodules)
             self.write_obsinfo(clonedir)
 
         if not os.path.realpath(fromdir+'/').startswith(os.path.realpath(clonedir+'/')):
@@ -222,18 +225,16 @@ class ObsGit(object):
     def cpio_directory(self, directory: str) -> None:
         logging.info("create archivefile for %s", directory)
         cmd = [ download_assets, '--create-cpio', '--', directory ]
-        archivefile = open(directory + '.obscpio', 'w')
-        self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
-        archivefile.close()
+        with open(directory + '.obscpio', 'w') as archivefile:
+            self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
 
     def cpio_specials(self, specials: List[str]) -> None:
         if not specials:
             return
         logging.info("create archivefile for specials")
         cmd = [ download_assets, '--create-cpio', '--', '.' ] + specials
-        archivefile = open('build.specials.obscpio', 'w')
-        self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
-        archivefile.close()
+        with open('build.specials.obscpio', 'w') as archivefile:
+            self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
 
     def cpio_directories(self) -> None:
         logging.debug("walk via %s", self.outdir)
@@ -482,11 +483,11 @@ if __name__ == '__main__':
     # workflow
     obsgit = ObsGit(outdir, url)
     if project_mode == 'true' or project_mode == '1':
-        obsgit.clone(shallow_clone)
+        obsgit.clone()
         obsgit.generate_package_xml_files()
         sys.exit(0)
 
-    obsgit.clone(shallow_clone, include_submodules=True)
+    obsgit.clone(include_submodules=True)
 
     if pack_directories:
         obsgit.add_service_info()
