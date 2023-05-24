@@ -167,14 +167,13 @@ class ObsGit(object):
     def write_obsinfo(self, outdir: str) -> None:
         cmd = [ 'git', 'rev-parse', 'HEAD' ]
         line = self.run_cmd(cmd, cwd=outdir, fatal="git rev-parse")
-        commit = line[1].rstrip()
+        commit = line.rstrip()
         cmd = [ 'git', 'log', '-n1', '--date=format:%Y%m%d', '--no-show-signature', '--pretty=format:%ct' ]
         line = self.run_cmd(cmd, cwd=outdir, fatal="git rev-parse")
-        tstamp = line[1].rstrip()
-
+        tstamp = line.rstrip()
         infofile = os.path.join(outdir, '_scmsync.obsinfo')
         with open(infofile, "w") as obsinfo:
-            obsinfo.write("mtime: " + str(tstamp) + "\n")
+            obsinfo.write("mtime: " + tstamp + "\n")
             obsinfo.write("commit: " + commit + "\n")
 
     def clone(self, shallow_clone: bool, include_submodules: bool=False) -> None:
