@@ -44,10 +44,11 @@ class ObsGit(object):
 
     _REGEXP = re.compile(r"^[a-zA-Z0-9\.\-\_\+]*$");
 
-    def __init__(self, outdir: str, url: str) -> None:
+    def __init__(self, outdir: str, url: str, projectscmsync: str) -> None:
         self.outdir   = outdir
         self.revision = None
         self.subdir   = None
+        self.projectscmsync = projectscmsync
         self.keep_meta = False
         self.enforced_deep_clone = False
         self.arch = []
@@ -86,7 +87,7 @@ class ObsGit(object):
         scmtoolurl = self.url.copy()
         if scmtoolurl[0] and scmtoolurl[0][0:4] == 'git+':
             scmtoolurl[0] = scmtoolurl[0][4:]
-        self.scmtoolurl = scmtoolurl
+        self.scmtoolurl = urllib.parse.urlunparse(scmtoolurl)
 
     def run_cmd_nonfatal(
             self,
@@ -131,7 +132,7 @@ class ObsGit(object):
         assert self.revision, "no revision is set but do_clone_commit was called"
         cmd = [ 'git', 'init', outdir ]
         self.run_cmd(cmd, fatal="git init")
-        cmd = [ 'git', '-C', outdir, 'remote', 'add', 'origin', urllib.parse.urlunparse(self.scmtoolurl) ]
+        cmd = [ 'git', '-C', outdir, 'remote', 'add', 'origin', self.scmtoolurl ]
         self.run_cmd(cmd, fatal="git remote add origin")
         cmd = [ 'git', '-C', outdir, 'fetch', 'origin', self.revision ]
         if shallow_clone:
@@ -156,7 +157,7 @@ class ObsGit(object):
         if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
             self.do_clone_commit(outdir, include_submodules=include_submodules)
             return
-        cmd = [ 'git', 'clone', urllib.parse.urlunparse(self.scmtoolurl), outdir ]
+        cmd = [ 'git', 'clone', self.scmtoolurl, outdir ]
         if include_submodules:
             if self.subdir:
                cmd += [ "--recurse-submodules=" + self.subdir ]
@@ -183,6 +184,14 @@ class ObsGit(object):
         with open(infofile, "w") as obsinfo:
             obsinfo.write("mtime: " + tstamp + "\n")
             obsinfo.write("commit: " + commit + "\n")
+            if self.scmtoolurl:
+                obsinfo.write("url: " + self.scmtoolurl + "\n")
+            if self.revision:
+                obsinfo.write("revision: " + self.revision + "\n")
+            if self.subdir:
+                obsinfo.write("subdir: " + self.subdir + "\n")
+            if self.projectscmsync:
+                obsinfo.write("projectscmsync: " + self.projectscmsync + "\n")
 
     def clone(self, include_submodules: bool=False) -> None:
         if not self.subdir:
@@ -314,12 +323,15 @@ class ObsGit(object):
         if info:
             self.write_info_file(os.path.join(self.outdir, "_service_info"), info)
 
-    def write_package_xml_file(self, name: str, url: str) -> None:
+    def write_package_xml_file(self, name: str, url: str, projectscmsync: str) -> None:
+        projecturlxml=''
+        if projectscmsync:
+            projecturlxml=f"""\n  <url>{escape(projectscmsync)}</url>"""
         with open(f"{name}.xml", 'w') as xmlfile:
             xmlfile.write(f"""<package name="{escape(name)}">
-  <bcntsynctag>{escape(name)}</bcntsynctag>
+  <bcntsynctag>{escape(name)}</bcntsynctag>{projecturlxml}
   <scmsync>{escape(url)}</scmsync>
-</package>""")
+</package>\n""")
 
     def write_package_xml_local_link(self, target: str, name: str) -> None:
         with open(f"{name}.xml", 'w') as xmlfile:
@@ -374,9 +386,18 @@ class ObsGit(object):
             # need to append a '/' to the base url so that the relative
             # path is properly resolved, otherwise we might descend one
             # directory too far
-            unparsed_url = urllib.parse.urljoin(urllib.parse.urlunparse(self.url) +"/", unparsed_url)
+            unparsed_url = urllib.parse.urljoin(self.scmtoolurl+'/', unparsed_url)
+        if self.url[0][0:4] == 'git+':
+            unparsed_url = 'git+' + unparsed_url
 
-        self.write_package_xml_file(package_name, unparsed_url)
+        projecturl = self.url.copy()
+        # replace the fragment with the checked out commit id
+        cmd = [ 'git', 'rev-parse', 'HEAD' ]
+        line = self.run_cmd(cmd, cwd=self.outdir, fatal="git rev-parse")
+        projecturl[5] = line.rstrip()
+        projectscmsync = urllib.parse.urlunparse(projecturl)
+
+        self.write_package_xml_file(package_name, unparsed_url, projectscmsync)
         self.write_info_file(package_name + ".info", revision)
         self.export_files.add(package_name + ".xml")
         self.export_files.add(package_name + ".info")
@@ -468,6 +489,8 @@ if __name__ == '__main__':
                         type=str)
     parser.add_argument('--projectmode',
                         help='just return the package list based on the subdirectories')
+    parser.add_argument('--projectscmsync',
+                        help='add also reference information of a project git for a package clone')
     parser.add_argument('--debug',
                         help='verbose debug mode')
     args = vars(parser.parse_args())
@@ -475,13 +498,14 @@ if __name__ == '__main__':
     url = args['url'][0]
     outdir = args['outdir'][0]
     project_mode = args['projectmode']
+    projectscmsync = args['projectscmsync']
 
     if args['debug']:
         logging.getLogger().setLevel(logging.DEBUG)
         logging.debug("Running in debug mode")
 
     # workflow
-    obsgit = ObsGit(outdir, url)
+    obsgit = ObsGit(outdir, url, projectscmsync)
     if project_mode == 'true' or project_mode == '1':
         obsgit.clone()
         obsgit.generate_package_xml_files()
