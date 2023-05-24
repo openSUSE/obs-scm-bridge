@@ -52,6 +52,16 @@ class ObsGit(object):
         self.enforced_deep_clone = False
         self.arch = []
         self.url = list(urllib.parse.urlparse(url))
+        protocol = self.url[0].split('+')
+        self.tool   = None
+        if len(protocol) == 2:
+            self.tool = protocol[0]
+            self.url[0] = protocol[1]
+        elif len(protocol) == 1 and self.url[0] in ('http', 'https', 'git'):
+            self.tool = 'git'
+        if self.tool != 'git':
+            print("ERROR: Only git protocol is supported, but not:", self.url[0] )
+            sys.exit(proc.returncode)
         self.no_lfs = False
         # for project level mode
         self.export_files = set(["_config"])
@@ -167,10 +177,10 @@ class ObsGit(object):
     def write_obsinfo(self, outdir: str) -> None:
         cmd = [ 'git', 'rev-parse', 'HEAD' ]
         line = self.run_cmd(cmd, cwd=outdir, fatal="git rev-parse")
-        commit = line[1].rstrip()
+        commit = line.rstrip()
         cmd = [ 'git', 'log', '-n1', '--date=format:%Y%m%d', '--no-show-signature', '--pretty=format:%ct' ]
         line = self.run_cmd(cmd, cwd=outdir, fatal="git rev-parse")
-        tstamp = line[1].rstrip()
+        tstamp = line.rstrip()
 
         infofile = os.path.join(outdir, '_scmsync.obsinfo')
         with open(infofile, "w") as obsinfo:
@@ -356,22 +366,22 @@ class ObsGit(object):
 
         # all good, write xml file and register the module
         self.gitsubmodules.add(path)
-        url = list(urllib.parse.urlparse(urlstr))
-        url[5] = revision
+        submodule_url = list(urllib.parse.urlparse(urlstr))
+        submodule_url[5] = revision
         if self.arch:
-            query = urllib.parse.parse_qs(url[4]);
+            query = urllib.parse.parse_qs(submodule_url[4]);
             query['arch'] = self.arch
-            url[4] = urllib.parse.urlencode(query)
+            submodule_url[4] = urllib.parse.urlencode(query)
 
         # handle relative urls in submodules
-        unparsed_url = urllib.parse.urlunparse(url)
-        if ".." == unparsed_url[0:2]:
+        submodule_url_str = urllib.parse.urlunparse(submodule_url)
+        if ".." == submodule_url_str[0:2]:
             # need to append a '/' to the base url so that the relative
             # path is properly resolved, otherwise we might descend one
             # directory too far
-            unparsed_url = urllib.parse.urljoin(urllib.parse.urlunparse(self.url) +"/", unparsed_url)
+            submodule_url_str = urllib.parse.urljoin(urllib.parse.urlunparse(self.url)+'/', submodule_url_str)
 
-        self.write_package_xml_file(package_name, unparsed_url)
+        self.write_package_xml_file(package_name, self.tool + '+' + submodule_url_str)
         self.write_info_file(package_name + ".info", revision)
         self.export_files.add(package_name + ".xml")
         self.export_files.add(package_name + ".info")
@@ -394,7 +404,7 @@ class ObsGit(object):
         if self.revision:
             self.url[5] = self.revision
 
-        self.write_package_xml_file(directory, urllib.parse.urlunparse(url))
+        self.write_package_xml_file(directory, self.tool + '+' + urllib.parse.urlunparse(url))
 
     def generate_package_xml_files(self) -> None:
         logging.debug("walk via %s", self.outdir)
