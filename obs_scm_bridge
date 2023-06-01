@@ -415,7 +415,7 @@ class ObsGit(object):
         # add subdir parameter to url
         url = self.url.copy()
         query = urllib.parse.parse_qs(url[4])
-        query['subdir'] = list(directory)
+        query['subdir'] = directory
         url[4] = urllib.parse.urlencode(query)
         if self.revision:
             url[5] = self.revision
