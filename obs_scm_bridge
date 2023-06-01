@@ -323,7 +323,7 @@ class ObsGit(object):
         if info:
             self.write_info_file(os.path.join(self.outdir, "_service_info"), info)
 
-    def write_package_xml_file(self, name: str, url: str, projectscmsync: str) -> None:
+    def write_package_xml_file(self, name: str, url: str, projectscmsync: str=None) -> None:
         projecturlxml=''
         if projectscmsync:
             projecturlxml=f"""\n  <url>{escape(projectscmsync)}</url>"""
