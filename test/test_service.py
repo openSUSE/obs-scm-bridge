@@ -14,7 +14,7 @@ _AAA_BASE_URL = "https://github.com/openSUSE/aaa_base"
 _LIBECONF_URL = "https://github.com/openSUSE/libeconf"
 
 CONTAINERFILE = f"""RUN set -eux; \
-    zypper -n in python3 git build diff; \
+    zypper -n in python3 git-core build diff; \
     . /etc/os-release && [[ ${{NAME}} = "SLES" ]] || zypper -n in git-lfs; \
     for recom in $(rpm -q --recommends build|grep ^perl); do zypper -n in $recom; done
 
@@ -38,22 +38,16 @@ RUN chmod +x /usr/bin/obs_scm_bridge
 TUMBLEWEED = DerivedContainer(
     base="registry.opensuse.org/opensuse/tumbleweed", containerfile=CONTAINERFILE
 )
-LEAP_15_3, LEAP_15_4 = (
-    DerivedContainer(
-        base=f"registry.opensuse.org/opensuse/leap:15.{ver}",
-        containerfile=CONTAINERFILE,
-    )
-    for ver in (3, 4)
-)
-BCI_BASE_15_3, BCI_BASE_15_4 = (
-    DerivedContainer(
-        base=f"registry.suse.com/bci/bci-base:15.{ver}", containerfile=CONTAINERFILE
-    )
-    for ver in (3, 4)
+LEAP_LATEST = DerivedContainer(
+    base="registry.opensuse.org/opensuse/leap:15.5",
+    containerfile=CONTAINERFILE,
 )
 
+BCI_BASE_LATEST = DerivedContainer(
+    base="registry.suse.com/bci/bci-base:15.5", containerfile=CONTAINERFILE
+)
 
-CONTAINER_IMAGES = [TUMBLEWEED, LEAP_15_3, LEAP_15_4, BCI_BASE_15_3, BCI_BASE_15_4]
+CONTAINER_IMAGES = [TUMBLEWEED, LEAP_LATEST, BCI_BASE_LATEST]
 
 
 _OBS_SCM_BRIDGE_CMD = "obs_scm_bridge --debug 1"
@@ -152,9 +146,7 @@ LFS_REPO = "https://gitea.opensuse.org/adrianSuSE/git-example-lfs"
 
 @pytest.mark.parametrize("fragment", ["", "#dc16ed074a49fbd104166d979b3045cc5d84db04"])
 @pytest.mark.parametrize("query", ["", "?lfs=1"])
-@pytest.mark.parametrize(
-    "container_per_test", [TUMBLEWEED, LEAP_15_3, LEAP_15_4], indirect=True
-)
+@pytest.mark.parametrize("container_per_test", [TUMBLEWEED, LEAP_LATEST], indirect=True)
 def test_downloads_lfs(container_per_test: ContainerData, fragment: str, query: str):
     """Test that the lfs file is automatically downloaded from the lfs server on
     clone.
