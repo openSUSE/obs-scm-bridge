@@ -1,7 +1,7 @@
 #
 # spec file for package obs-scm-bridge
 #
-# Copyright (c) 2022 SUSE LLC
+# Copyright (c) 2023 SUSE LLC
 #
 # All modifications and additions to the file contributed by third parties
 # remain the property of their copyright owners, unless otherwise agreed
@@ -22,15 +22,13 @@
 %define build_pkg_name build
 %endif
 Name:           obs-scm-bridge
-Version:        0.0.1
+Version:        0.4.2
 Release:        0
 Summary:        A help service to work with git repositories in OBS
 License:        GPL-2.0-or-later
-URL:            https://github.com/openSUSE/%{name}
+URL:            https://github.com/openSUSE/obs-scm-bridge
 Source0:        %{name}-%{version}.tar.xz
 Requires:       %{build_pkg_name} >= 20211125
-Requires:       git
-Requires:       git-lfs
 # these are just recommends in build package, but we need it here
 Requires:       perl(Date::Parse)
 Requires:       perl(LWP::UserAgent)
@@ -42,6 +40,12 @@ Requires:       perl(XML::Parser)
 Requires:       perl(YAML::LibYAML)
 Recommends:     python3-packaging
 BuildArch:      noarch
+%if 0%{?fedora} || 0%{?rhel}
+Requires:       git
+%else
+Requires:       git-core
+Requires:       git-lfs
+%endif
 
 %description
 
