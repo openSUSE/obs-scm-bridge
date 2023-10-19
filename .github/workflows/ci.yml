@@ -13,13 +13,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4.3.0
-      - uses: Gr1N/setup-poetry@v7
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
       - uses: actions/cache@v3
         with:
-          path: ~/.tox
-          key: tox-${{ hashFiles('poetry.lock') }}
-
-      - run: poetry install
-      - run: poetry run pytest -vv -- -n auto
+          path: ~/.cache/pypoetry/virtualenvs
+          key: poetry-${{ hashFiles('poetry.lock') }}
+      - run: |
+          pip install --upgrade poetry
+      - name: Run tests
+        run: |
+          poetry install
+          poetry run pytest -vv -- -n auto
