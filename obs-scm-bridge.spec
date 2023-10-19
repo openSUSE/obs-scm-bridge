@@ -29,6 +29,7 @@ License:        GPL-2.0-or-later
 URL:            https://github.com/openSUSE/obs-scm-bridge
 Source0:        %{name}-%{version}.tar.xz
 Requires:       %{build_pkg_name} >= 20211125
+Requires:       git-lfs
 # these are just recommends in build package, but we need it here
 Requires:       perl(Date::Parse)
 Requires:       perl(LWP::UserAgent)
@@ -44,7 +45,6 @@ BuildArch:      noarch
 Requires:       git
 %else
 Requires:       git-core
-Requires:       git-lfs
 %endif
 
 %description
