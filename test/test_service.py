@@ -57,6 +57,7 @@ def test_service_help(auto_container: ContainerData):
     """This is just a simple smoke test to check whether the script works."""
     auto_container.connection.run_expect([0], f"{_OBS_SCM_BRIDGE_CMD} --help")
 
+
 def test_clones_the_repository(auto_container_per_test: ContainerData):
     """Check that the service clones the manually created repository correctly."""
     dest = "/tmp/ring0"
@@ -66,6 +67,7 @@ def test_clones_the_repository(auto_container_per_test: ContainerData):
     # delete _scmsync.obsinfo so that the diff succeeds
     auto_container_per_test.connection.run_expect([0], f"rm {dest}/_scmsync.obsinfo")
     auto_container_per_test.connection.run_expect([0], f"diff {dest} {_RPMS_DIR}ring0")
+
 
 @pytest.mark.parametrize("container_per_test", CONTAINER_IMAGES, indirect=True)
 @pytest.mark.parametrize(
@@ -141,10 +143,10 @@ def test_creates_packagelist(auto_container_per_test: ContainerData):
         )
 
 
-LFS_REPO = "https://gitea.opensuse.org/adrianSuSE/git-example-lfs"
+LFS_REPO = "https://src.opensuse.org/pool/trivy.git"
 
 
-@pytest.mark.parametrize("fragment", ["", "#dc16ed074a49fbd104166d979b3045cc5d84db04"])
+@pytest.mark.parametrize("fragment", ["", "#a03edab0f045ed7be68faeddef7d7ecc9416592b"])
 @pytest.mark.parametrize("query", ["", "?lfs=1"])
 @pytest.mark.parametrize("container_per_test", [TUMBLEWEED, LEAP_LATEST], indirect=True)
 def test_downloads_lfs(container_per_test: ContainerData, fragment: str, query: str):
@@ -157,12 +159,12 @@ def test_downloads_lfs(container_per_test: ContainerData, fragment: str, query: 
         [0], f"{_OBS_SCM_BRIDGE_CMD} --outdir {_DEST} --url {LFS_REPO}{query}{fragment}"
     )
 
-    tar_archive = container_per_test.connection.file(f"{_DEST}/orangebox-0.2.0.tar.gz")
+    tar_archive = container_per_test.connection.file(f"{_DEST}/trivy-0.47.0.tar.zst")
     assert tar_archive.exists and tar_archive.is_file
     assert tar_archive.size > 10 * 1024
 
 
-@pytest.mark.parametrize("fragment", ["", "#dc16ed074a49fbd104166d979b3045cc5d84db04"])
+@pytest.mark.parametrize("fragment", ["", "#a03edab0f045ed7be68faeddef7d7ecc9416592b"])
 def test_lfs_opt_out(auto_container_per_test: ContainerData, fragment: str):
     _DEST = "/tmp/lfs-example"
     auto_container_per_test.connection.run_expect(
@@ -170,7 +172,7 @@ def test_lfs_opt_out(auto_container_per_test: ContainerData, fragment: str):
     )
 
     tar_archive = auto_container_per_test.connection.file(
-        f"{_DEST}/orangebox-0.2.0.tar.gz"
+        f"{_DEST}/trivy-0.47.0.tar.zst"
     )
     assert tar_archive.exists and tar_archive.is_file
     assert tar_archive.size < 1024
