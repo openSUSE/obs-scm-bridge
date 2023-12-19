@@ -434,10 +434,10 @@ class ObsGit(object):
             for section in gsmconfig.sections():
                 if not 'path' in gsmconfig[section]:
                     logging.warn("path not defined for git submodule " + section)
-                    return
+                    continue
                 if not 'url' in gsmconfig[section]:
                     logging.warn("url not defined for git submodule " + section)
-                    return
+                    continue
                 self.process_package_submodule(gsmconfig[section])
 
         # handle plain files and directories
