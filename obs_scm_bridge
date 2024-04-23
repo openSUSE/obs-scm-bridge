@@ -130,7 +130,10 @@ class ObsGit(object):
 
     def do_clone_commit(self, outdir: str, include_submodules: bool=False) -> None:
         assert self.revision, "no revision is set but do_clone_commit was called"
-        cmd = [ 'git', 'init', outdir ]
+        objectformat='--object-format=sha1'
+        if len(self.revision) == 64:
+            objectformat='--object-format=sha256'
+        cmd = [ 'git', 'init', objectformat, outdir ]
         self.run_cmd(cmd, fatal="git init")
         cmd = [ 'git', '-C', outdir, 'remote', 'add', 'origin', self.scmtoolurl ]
         self.run_cmd(cmd, fatal="git remote add origin")
