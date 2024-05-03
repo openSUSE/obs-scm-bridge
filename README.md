@@ -64,6 +64,16 @@ your url with
 
  * subdir=<DIRECTORY> CGI parameter to package only a subdirectory
 
+Special directives for entire projects
+======================================
+
+ * projectmode=1 is switching project mode on. The bridge will just prepare
+                 package meta files for each subdirectory.
+
+ * onlybuild=<DIRECTORY> can be used to specify to only export defined packages
+                         without modifing the git source. The parameter can be
+                         used multiple times to collect multiple.
+
 TODO
 ====
 
