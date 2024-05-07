@@ -55,6 +55,7 @@ class ObsGit(object):
         self.onlybuild = None
         self.url = list(urllib.parse.urlparse(url))
         self.no_lfs = False
+        self.enforce_bcntsynctag = False
         # for project level mode
         self.export_files = set(["_config"])
         self.gitsubmodules: Set[str] = set()
@@ -68,6 +69,10 @@ class ObsGit(object):
         if "arch" in query:
             self.arch = query['arch']
             del query['arch']
+            self.url[4] = urllib.parse.urlencode(query)
+        if "enforce_bcntsynctag" in query:
+            self.enforce_bcntsynctag = True
+            del query['enforce_bcntsynctag']
             self.url[4] = urllib.parse.urlencode(query)
         if "keepmeta" in query:
             self.enforced_deep_clone = True
@@ -339,16 +344,18 @@ class ObsGit(object):
         if projectscmsync:
             projecturlxml=f"""\n  <url>{escape(projectscmsync)}</url>"""
         with open(f"{name}.xml", 'w') as xmlfile:
-            xmlfile.write(f"""<package name="{escape(name)}">
-  <bcntsynctag>{escape(name)}</bcntsynctag>{projecturlxml}
-  <scmsync>{escape(url)}</scmsync>
+            xmlfile.write(f"""<package name="{escape(name)}">""")
+            if self.enforce_bcntsynctag:
+                xmlfile.write(f"""<bcntsynctag>{escape(name)}</bcntsynctag>{projecturlxml}""")
+            xmlfile.write(f"""<scmsync>{escape(url)}</scmsync>
 </package>\n""")
 
     def write_package_xml_local_link(self, target: str, name: str) -> None:
         with open(f"{name}.xml", 'w') as xmlfile:
-            xmlfile.write(f"""<package name="{escape(name)}">
-  <bcntsynctag>{escape(target)}</bcntsynctag>
-</package>""")
+            xmlfile.write(f"""<package name="{escape(name)}">""")
+            if self.enforce_bcntsynctag:
+                xmlfile.write(f"""<bcntsynctag>{escape(name)}</bcntsynctag>{projecturlxml}""")
+            xmlfile.write(f"""</package>""")
         self.export_files.add(name + ".xml")
         with open(f"{name}.link", 'w') as linkfile:
             linkfile.write(f"""<link package="{escape(target)}" cicount="copy" />""")
