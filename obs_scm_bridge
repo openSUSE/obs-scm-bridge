@@ -60,6 +60,7 @@ class ObsGit(object):
         self.export_files = set(["_config"])
         self.gitsubmodules: Set[str] = set()
         self.revisions: Optional[Dict[str, str]] = None
+        self.processed = {}
 
         query = urllib.parse.parse_qs(self.url[4])
         if "subdir" in query:
@@ -323,6 +324,8 @@ class ObsGit(object):
         return info.strip()
 
     def write_info_file(self, filename: str, info: str) -> None:
+        if not filename.startswith("/"):
+            filename = self.outdir + "/" + filename + ".info"
         with open(filename, 'w') as infofile:
             infofile.write(info + '\n')
 
@@ -343,7 +346,7 @@ class ObsGit(object):
             return
         if projectscmsync:
             projecturlxml=f"""\n  <url>{escape(projectscmsync)}</url>"""
-        with open(f"{name}.xml", 'w') as xmlfile:
+        with open(f"{self.outdir}/{name}.xml", 'w') as xmlfile:
             xmlfile.write(f"""<package name="{escape(name)}">""")
             if self.enforce_bcntsynctag:
                 xmlfile.write(f"""<bcntsynctag>{escape(name)}</bcntsynctag>{projecturlxml}""")
@@ -351,13 +354,13 @@ class ObsGit(object):
 </package>\n""")
 
     def write_package_xml_local_link(self, target: str, name: str) -> None:
-        with open(f"{name}.xml", 'w') as xmlfile:
+        with open(f"{self.outdir}/{name}.xml", 'w') as xmlfile:
             xmlfile.write(f"""<package name="{escape(name)}">""")
             if self.enforce_bcntsynctag:
                 xmlfile.write(f"""<bcntsynctag>{escape(name)}</bcntsynctag>{projecturlxml}""")
             xmlfile.write(f"""</package>""")
         self.export_files.add(name + ".xml")
-        with open(f"{name}.link", 'w') as linkfile:
+        with open(f"{self.outdir}/{name}.link", 'w') as linkfile:
             linkfile.write(f"""<link package="{escape(target)}" cicount="copy" />""")
         self.export_files.add(name + ".link")
 
@@ -375,6 +378,9 @@ class ObsGit(object):
         urlstr = gsmsection['url']
         if not package_name:
             package_name = path
+
+        if package_name in self.processed:
+            return
 
         if '/' in path:
             # we handle only top level submodules in project mode
@@ -415,6 +421,7 @@ class ObsGit(object):
         projecturl[5] = line.rstrip()
         projectscmsync = urllib.parse.urlunparse(projecturl)
 
+        self.processed[package_name] = True
         self.write_package_xml_file(package_name, unparsed_url, projectscmsync)
         self.write_info_file(package_name + ".info", revision)
         self.export_files.add(package_name + ".xml")
@@ -428,7 +435,7 @@ class ObsGit(object):
             return
 
         # add subdir info file
-        self.write_info_file(directory + ".info", info)
+        self.write_info_file(directory, info)
 
         # add subdir parameter to url
         url = self.url.copy()
@@ -441,8 +448,20 @@ class ObsGit(object):
         self.write_package_xml_file(directory, urllib.parse.urlunparse(url))
 
     def generate_package_xml_files(self) -> None:
-        logging.debug("walk via %s", self.outdir)
-        os.chdir(self.outdir)
+        self.generate_package_xml_files_of_directory(self.outdir)
+
+    def generate_package_xml_files_of_directory(self, directory) -> None:
+        logging.debug("check %s", directory)
+        if os.path.isfile(directory + '/_subdirs'):
+            import yaml
+            with open(directory + '/_subdirs') as stream:
+               yml = yaml.safe_load(stream)
+               for subdir in yml['subdirs']:
+                   self.generate_package_xml_files_of_directory(directory + '/' + subdir)
+               return
+
+        logging.debug("walk via %s", directory)
+        os.chdir(directory)
 
         # find all top level git submodules
         gsmconfig = None
@@ -467,8 +486,11 @@ class ObsGit(object):
                     logging.warn("only local links are supported, skipping: " + name)
                     continue
                 if target in self.gitsubmodules or os.path.isdir(target):
+                    if name in self.processed:
+                        continue
                     self.write_package_xml_local_link(target, name)
                     os.unlink(name)
+                    self.processed[name] = True
                 else:
                     logging.debug("skipping symlink to a non git submodule %s -> %s", name, target)
                     os.unlink(name)
@@ -486,7 +508,10 @@ class ObsGit(object):
                     # already handled as git submodule
                     shutil.rmtree(name)
                     continue
+                if name in self.processed:
+                    continue
                 self.process_package_subdirectory(name)
+                self.processed[name] = True
             else:
                 if not name in self.export_files:
                     os.unlink(name)
