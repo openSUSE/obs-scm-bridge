@@ -25,6 +25,7 @@ import urllib.parse
 import configparser
 
 download_assets = '/usr/lib/build/download_assets'
+critical_instances_config = "/etc/obs/services/scm-bridge-critical_instances"
 export_debian_orig_from_git = '/usr/lib/build/export_debian_orig_from_git'
 pack_directories = False
 get_assets = False
@@ -52,6 +53,7 @@ class ObsGit(object):
         self.keep_meta = False
         self.enforced_deep_clone = False
         self.arch = []
+        self.critical_git_servers = []
         self.onlybuild = None
         self.url = list(urllib.parse.urlparse(url))
         self.no_lfs = False
@@ -101,6 +103,12 @@ class ObsGit(object):
             scmtoolurl[0] = scmtoolurl[0][4:]
         self.scmtoolurl = urllib.parse.urlunparse(scmtoolurl)
 
+    def add_critical_instance(
+            self,
+            name: str
+    ) -> None:
+        self.critical_git_servers.append(name)
+
     def run_cmd_nonfatal(
             self,
             cmd: List[str],
@@ -136,7 +144,14 @@ class ObsGit(object):
     ) -> str:
         returncode, output = self.run_cmd_nonfatal(cmd, cwd=cwd, stdout=stdout, env=env)
         if returncode != 0:
-            print("ERROR: " + fatal + " failed: ", output)
+            error="ERROR"
+            for name in self.critical_git_servers:
+                a = output.find("Failed to connect to " + name)
+                if output.find("Failed to connect to " + name) >= 0:
+                    error="TRANSIENT ERROR"
+                if output.find("unable to access") >= 0 and output.find(name) >= 0:
+                    error="TRANSIENT ERROR"
+            print(error + ": " + fatal + " failed: ", output)
             sys.exit(returncode)
         return output
 
@@ -549,6 +564,12 @@ if __name__ == '__main__':
 
     # workflow
     obsgit = ObsGit(outdir, url, projectscmsync)
+    obsgit.add_critical_instance("src.opensuse.org")
+    if os.path.isfile(critical_instances_config):
+       with open(critical_instances_config) as conf:
+           while line := conf.readline():
+               obsgit.add_critical_instance(line.rstrip())
+
     if project_mode == 'true' or project_mode == '1':
         obsgit.clone()
         obsgit.generate_package_xml_files()
