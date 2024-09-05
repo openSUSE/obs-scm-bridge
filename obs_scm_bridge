@@ -567,7 +567,7 @@ if __name__ == '__main__':
     obsgit.add_critical_instance("src.opensuse.org")
     if os.path.isfile(critical_instances_config):
        with open(critical_instances_config) as conf:
-           while line := conf.readline():
+           for line in conf.readline():
                obsgit.add_critical_instance(line.rstrip())
 
     if project_mode == 'true' or project_mode == '1':
