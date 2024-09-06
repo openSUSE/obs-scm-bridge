@@ -62,7 +62,7 @@ def test_clones_the_repository(auto_container_per_test: ContainerData):
     """Check that the service clones the manually created repository correctly."""
     dest = "/tmp/ring0"
     auto_container_per_test.connection.run_expect(
-        [0], f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} --url {_RPMS_DIR}ring0"
+            [0], f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} --url file://{_RPMS_DIR}ring0"
     )
     # delete _scmsync.obsinfo so that the diff succeeds
     auto_container_per_test.connection.run_expect([0], f"rm {dest}/_scmsync.obsinfo")
@@ -100,7 +100,7 @@ def test_creates_packagelist(auto_container_per_test: ContainerData):
     dest = "/tmp/ring0"
     auto_container_per_test.connection.run_expect(
         [0],
-        f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} --url {_RPMS_DIR}ring0 --projectmode 1",
+        f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} --url file://{_RPMS_DIR}ring0 --projectmode 1",
     )
     libeconf_hash, aaa_base_hash = (
         auto_container_per_test.connection.file(
@@ -146,7 +146,7 @@ def test_creates_packagelist(auto_container_per_test: ContainerData):
 LFS_REPO = "https://src.opensuse.org/pool/trivy.git"
 
 
-@pytest.mark.parametrize("fragment", ["", "#a03edab0f045ed7be68faeddef7d7ecc9416592b"])
+@pytest.mark.parametrize("fragment", ["", "#eab0f16835309c7e772f81d523bb47356f3e14f05de74bfa88eaf59d73712215"])
 @pytest.mark.parametrize("query", ["", "?lfs=1"])
 @pytest.mark.parametrize("container_per_test", [TUMBLEWEED, LEAP_LATEST], indirect=True)
 def test_downloads_lfs(container_per_test: ContainerData, fragment: str, query: str):
@@ -159,12 +159,12 @@ def test_downloads_lfs(container_per_test: ContainerData, fragment: str, query: 
         [0], f"{_OBS_SCM_BRIDGE_CMD} --outdir {_DEST} --url {LFS_REPO}{query}{fragment}"
     )
 
-    tar_archive = container_per_test.connection.file(f"{_DEST}/trivy-0.47.0.tar.zst")
+    tar_archive = container_per_test.connection.file(f"{_DEST}/trivy-0.54.1.tar.zst")
     assert tar_archive.exists and tar_archive.is_file
     assert tar_archive.size > 10 * 1024
 
 
-@pytest.mark.parametrize("fragment", ["", "#a03edab0f045ed7be68faeddef7d7ecc9416592b"])
+@pytest.mark.parametrize("fragment", ["", "#eab0f16835309c7e772f81d523bb47356f3e14f05de74bfa88eaf59d73712215"])
 def test_lfs_opt_out(auto_container_per_test: ContainerData, fragment: str):
     _DEST = "/tmp/lfs-example"
     auto_container_per_test.connection.run_expect(
@@ -172,7 +172,7 @@ def test_lfs_opt_out(auto_container_per_test: ContainerData, fragment: str):
     )
 
     tar_archive = auto_container_per_test.connection.file(
-        f"{_DEST}/trivy-0.47.0.tar.zst"
+        f"{_DEST}/trivy-0.54.1.tar.zst"
     )
     assert tar_archive.exists and tar_archive.is_file
     assert tar_archive.size < 1024
