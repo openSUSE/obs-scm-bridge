@@ -340,7 +340,7 @@ class ObsGit(object):
 
     def write_info_file(self, filename: str, info: str) -> None:
         if not filename.startswith("/"):
-            filename = self.outdir + "/" + filename + ".info"
+            filename = self.outdir + "/" + filename
         with open(filename, 'w') as infofile:
             infofile.write(info + '\n')
 
@@ -450,7 +450,7 @@ class ObsGit(object):
             return
 
         # add subdir info file
-        self.write_info_file(directory, info)
+        self.write_info_file(directory + ".info", info)
 
         # add subdir parameter to url
         url = self.url.copy()
