@@ -144,14 +144,13 @@ class ObsGit(object):
     ) -> str:
         returncode, output = self.run_cmd_nonfatal(cmd, cwd=cwd, stdout=stdout, env=env)
         if returncode != 0:
-            error="ERROR"
             for name in self.critical_git_servers:
                 a = output.find("Failed to connect to " + name)
-                if output.find("Failed to connect to " + name) >= 0:
-                    error="TRANSIENT ERROR"
-                if output.find("unable to access") >= 0 and output.find(name) >= 0:
-                    error="TRANSIENT ERROR"
-            print(error + ": " + fatal + " failed: ", output)
+            print("ERROR: " + fatal + " failed: ", output)
+            if output.find("Failed to connect to " + name) >= 0:
+                print("\nTRANSIENT ERROR\n")
+            if output.find("unable to access") >= 0 and output.find(name) >= 0:
+                print("\nTRANSIENT ERROR\n")
             sys.exit(returncode)
         return output
 
