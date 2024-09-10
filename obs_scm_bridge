@@ -26,6 +26,7 @@ import configparser
 
 download_assets = '/usr/lib/build/download_assets'
 critical_instances_config = "/etc/obs/services/scm-bridge-critical_instances"
+credentials_config = "/etc/obs/services/scm-bridge-credentials"
 export_debian_orig_from_git = '/usr/lib/build/export_debian_orig_from_git'
 pack_directories = False
 get_assets = False
@@ -108,6 +109,34 @@ class ObsGit(object):
             name: str
     ) -> None:
         self.critical_git_servers.append(name)
+
+    def setup_credentials(
+            self,
+            cred_file: str
+    ) -> None:
+        GIT_STORE='/dev/shm/obs_scm_bridge.store.' + str(os.getpid())
+
+        cmd = [ 'git', 'config', '--global', 'credential.helper', f"store --file {GIT_STORE}" ]
+        self.run_cmd(cmd, fatal="git config credential.helper")
+
+        cmd = [ 'git', 'credential-store', '--file', GIT_STORE, 'store' ]
+        proc = subprocess.Popen(cmd,
+                                shell=False,
+                                encoding="utf-8",
+                                stdin=subprocess.PIPE)
+        with open(cred_file, "r", encoding="utf-8") as cred:
+            for l in cred.readlines():
+                line = l.rstrip()
+                entry = line.split(' ')
+                if len(entry) == 3:
+                    # hostname username token/password
+                    text=f"protocol=https\nhost={entry[0]}\nusername={entry[1]}\npassword={entry[2]}\n"
+                    proc.communicate(input=text)
+                elif line != '':
+                    logging.error("Invalid line in " + GIT_STORE)
+        if proc.returncode != 0:
+            logging.error("Could not setup git credential store")
+            sys.exit(1)
 
     def run_cmd_nonfatal(
             self,
@@ -568,8 +597,10 @@ if __name__ == '__main__':
     obsgit.add_critical_instance("src.opensuse.org")
     if os.path.isfile(critical_instances_config):
        with open(critical_instances_config) as conf:
-           for line in conf.readline():
+           for line in conf.readlines():
                obsgit.add_critical_instance(line.rstrip())
+    if os.path.isfile(credentials_config):
+        obsgit.setup_credentials(credentials_config)
 
     if project_mode == 'true' or project_mode == '1':
         obsgit.clone()
