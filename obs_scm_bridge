@@ -114,12 +114,12 @@ class ObsGit(object):
             self,
             cred_file: str
     ) -> None:
-        GIT_STORE='/dev/shm/obs_scm_bridge.store.' + str(os.getpid())
+        git_store = tempfile.mkstemp(prefix="obs-scm-bridge-git-cred-store", text=True)
 
-        cmd = [ 'git', 'config', '--global', 'credential.helper', f"store --file {GIT_STORE}" ]
+        cmd = [ 'git', 'config', '--global', 'credential.helper', f"store --file {git_store[1]}" ]
         self.run_cmd(cmd, fatal="git config credential.helper")
 
-        cmd = [ 'git', 'credential-store', '--file', GIT_STORE, 'store' ]
+        cmd = [ 'git', 'credential-store', '--file', git_store[1], 'store' ]
         proc = subprocess.Popen(cmd,
                                 shell=False,
                                 encoding="utf-8",
