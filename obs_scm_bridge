@@ -25,8 +25,8 @@ import urllib.parse
 import configparser
 
 download_assets = '/usr/lib/build/download_assets'
-critical_instances_config = "/etc/obs/services/scm-bridge-critical_instances"
-credentials_config = "/etc/obs/services/scm-bridge-credentials"
+critical_instances_config = "/etc/obs/services/scm-bridge/critical-instances"
+credentials_config = "/etc/obs/services/scm-bridge/credentials"
 export_debian_orig_from_git = '/usr/lib/build/export_debian_orig_from_git'
 pack_directories = False
 get_assets = False
@@ -64,6 +64,7 @@ class ObsGit(object):
         self.gitsubmodules: Set[str] = set()
         self.revisions: Optional[Dict[str, str]] = None
         self.processed = {}
+        self.git_store = None
 
         query = urllib.parse.parse_qs(self.url[4])
         if "subdir" in query:
@@ -114,29 +115,32 @@ class ObsGit(object):
             self,
             cred_file: str
     ) -> None:
-        git_store = tempfile.mkstemp(prefix="obs-scm-bridge-git-cred-store", text=True)
-
-        cmd = [ 'git', 'config', '--global', 'credential.helper', f"store --file {git_store[1]}" ]
+        self.git_store = tempfile.mkstemp(prefix="obs-scm-bridge-git-cred-store", text=True)
+        cmd = [ 'git', 'config', '--global', 'credential.helper', f"store --file {self.git_store[1]}" ]
         self.run_cmd(cmd, fatal="git config credential.helper")
 
-        cmd = [ 'git', 'credential-store', '--file', git_store[1], 'store' ]
-        proc = subprocess.Popen(cmd,
-                                shell=False,
-                                encoding="utf-8",
-                                stdin=subprocess.PIPE)
         with open(cred_file, "r", encoding="utf-8") as cred:
             for l in cred.readlines():
                 line = l.rstrip()
                 entry = line.split(' ')
-                if len(entry) == 3:
-                    # hostname username token/password
-                    text=f"protocol=https\nhost={entry[0]}\nusername={entry[1]}\npassword={entry[2]}\n"
-                    proc.communicate(input=text)
-                elif line != '':
-                    logging.error("Invalid line in " + GIT_STORE)
-        if proc.returncode != 0:
-            logging.error("Could not setup git credential store")
-            sys.exit(1)
+                if len(entry) != 4:
+                    continue
+
+                project = str(os.getenv('OBS_SERVICE_PROJECT'))
+                if entry[0] != '*' and not project.startswith(entry[0]):
+                    continue
+
+                cmd = [ 'git', 'credential-store', '--file', self.git_store[1], 'store' ]
+                proc = subprocess.Popen(cmd,
+                                        shell=False,
+                                        encoding="utf-8",
+                                        stdin=subprocess.PIPE)
+                # hostname username token/password
+                text=f"protocol=https\nhost={entry[1]}\nusername={entry[2]}\npassword={entry[3]}\n"
+                proc.communicate(input=text)
+                if proc.returncode != 0:
+                    logging.error("Could not setup git credential store")
+                    sys.exit(1)
 
     def run_cmd_nonfatal(
             self,

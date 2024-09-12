@@ -79,20 +79,23 @@ Special configuration files
 
 These configuration files are optional and usually only used on OBS server side.
 
-/etc/obs/services/scm-bridge-critical_instances
+/etc/obs/services/scm-bridge/critical-instances
   Each line contain a list of critical git server instances. These instances
   are support to be reachable always. In case of errors the OBS server
   will retry always to re-run the server.
   Please note that dropped or not accessible repositories still count as
   an error.
 
-/etc/obs/services/scm-bridge-credentials
+/etc/obs/services/scm-bridge/credentials
   Each line must contain a triplet with a space seperated:
 
-  HOSTNAME USERNAME TOKEN/PASSWORD
+  PROJECT_NAMESPACE HOSTNAME USERNAME TOKEN/PASSWORD
 
   These credentials will be used for git cloning when no other credentials
   are defined in the specified URL.
+
+  PROJECT_NAMESPACE is also valid for all sub projects. When using '*' it is
+  valid for all projects.
 
 
 TODO
