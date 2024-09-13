@@ -507,7 +507,8 @@ class ObsGit(object):
                yml = yaml.safe_load(stream)
                for subdir in yml['subdirs']:
                    self.generate_package_xml_files_of_directory(directory + '/' + subdir)
-               return
+               if not 'toplevel' in yml or yml['toplevel'] != 'include':
+                   return
 
         logging.debug("walk via %s", directory)
         os.chdir(directory)
