@@ -39,6 +39,7 @@ Requires:       perl(Time::Zone)
 Requires:       perl(URI)
 Requires:       perl(XML::Parser)
 Requires:       perl(YAML::LibYAML)
+Requires:       python3-PyYAML
 Recommends:     python3-packaging
 BuildArch:      noarch
 %if 0%{?fedora} || 0%{?rhel}
