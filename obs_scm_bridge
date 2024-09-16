@@ -485,6 +485,7 @@ class ObsGit(object):
 
         # add subdir info file
         self.write_info_file(directory + ".info", info)
+        self.export_files.add(directory + ".info")
 
         # add subdir parameter to url
         url = self.url.copy()
@@ -495,6 +496,7 @@ class ObsGit(object):
             url[5] = self.revision
 
         self.write_package_xml_file(directory, urllib.parse.urlunparse(url))
+        self.export_files.add(directory + ".xml")
 
     def generate_package_xml_files(self) -> None:
         self.generate_package_xml_files_of_directory(self.outdir)
