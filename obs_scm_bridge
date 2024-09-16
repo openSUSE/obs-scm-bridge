@@ -19,6 +19,7 @@ import sys
 import logging
 import subprocess
 import tempfile
+import yaml
 from html import escape
 from typing import Dict, List, Optional, Set, TextIO, Tuple, Union
 import urllib.parse
@@ -476,9 +477,9 @@ class ObsGit(object):
         self.export_files.add(package_name + ".xml")
         self.export_files.add(package_name + ".info")
 
-    def process_package_subdirectory(self, directory: str) -> None:
-        info = self.get_subdir_info(directory)
-        shutil.rmtree(directory)
+    def process_package_subdirectory(self, directory: str, subdir: str) -> None:
+        info = self.get_subdir_info(subdir + directory)
+        shutil.rmtree(subdir + directory)
         if not self._REGEXP.match(directory):
             logging.warn("directory name contains invalid char: %s", directory)
             return
@@ -490,7 +491,7 @@ class ObsGit(object):
         # add subdir parameter to url
         url = self.url.copy()
         query = urllib.parse.parse_qs(url[4])
-        query['subdir'] = directory
+        query['subdir'] = subdir + directory
         url[4] = urllib.parse.urlencode(query)
         if self.revision:
             url[5] = self.revision
@@ -503,17 +504,18 @@ class ObsGit(object):
 
     def generate_package_xml_files_of_directory(self, directory) -> None:
         logging.debug("check %s", directory)
+        subdir_yml = None
         if os.path.isfile(directory + '/_subdirs'):
-            import yaml
             with open(directory + '/_subdirs') as stream:
-               yml = yaml.safe_load(stream)
-               for subdir in yml['subdirs']:
+               subdir_yml = yaml.safe_load(stream)
+               for subdir in subdir_yml['subdirs']:
                    self.generate_package_xml_files_of_directory(directory + '/' + subdir)
-               if not 'toplevel' in yml or yml['toplevel'] != 'include':
+               if not 'toplevel' in subdir_yml or subdir_yml['toplevel'] != 'include':
                    return
 
-        logging.debug("walk via %s", directory)
-        os.chdir(directory)
+        subdir = directory.removeprefix(self.outdir).lstrip("/")
+        if len(subdir) > 0:
+            subdir = subdir + '/'
 
         # find all top level git submodules
         gsmconfig = None
@@ -529,40 +531,45 @@ class ObsGit(object):
                     continue
                 self.process_package_submodule(gsmconfig[section])
 
+        os.chdir(self.outdir)
         # handle plain files and directories
-        listing = sorted(os.listdir("."))
+        logging.debug("walk via %s", directory)
+        listing = sorted(os.listdir(directory))
         for name in listing:
-            if os.path.islink(name):
-                target = os.readlink(name).rstrip('/') # this is no recursive lookup, but is there a usecase?
+            fname = subdir + name
+            if os.path.islink(fname):
+                if name in self.processed:
+                    os.unlink(fname)
+                    continue
+                target = os.readlink(fname).rstrip('/') # this is no recursive lookup, but is there a usecase?
                 if '/' in target:
                     logging.warn("only local links are supported, skipping: " + name)
                     continue
                 if target in self.gitsubmodules or os.path.isdir(target):
-                    if name in self.processed:
-                        continue
                     self.write_package_xml_local_link(target, name)
-                    os.unlink(name)
                     self.processed[name] = True
+                    os.unlink(name)
                 else:
                     logging.debug("skipping symlink to a non git submodule %s -> %s", name, target)
                     os.unlink(name)
+                continue
 
-        # handle plain files and directories
-        listing = sorted(os.listdir("."))
-        for name in listing:
             if name == '.git' and not self.keep_meta:
-                shutil.rmtree(name)
+                shutil.rmtree(fname)
                 continue
-            if os.path.islink(name):
+            if os.path.islink(fname):
                 continue
-            elif os.path.isdir(name):
+            elif os.path.isdir(fname):
                 if name in self.gitsubmodules:
                     # already handled as git submodule
                     shutil.rmtree(name)
                     continue
                 if name in self.processed:
                     continue
-                self.process_package_subdirectory(name)
+                if subdir_yml and name in subdir_yml['subdirs']:
+                    shutil.rmtree(name)
+                    continue
+                self.process_package_subdirectory(name, subdir)
                 self.processed[name] = True
             else:
                 if not name in self.export_files:
