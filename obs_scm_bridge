@@ -517,6 +517,8 @@ class ObsGit(object):
         if len(subdir) > 0:
             subdir = subdir + '/'
 
+        os.chdir(self.outdir)
+
         # find all top level git submodules
         gsmconfig = None
         if os.path.isfile('.gitmodules'):
@@ -531,7 +533,6 @@ class ObsGit(object):
                     continue
                 self.process_package_submodule(gsmconfig[section])
 
-        os.chdir(self.outdir)
         # handle plain files and directories
         logging.debug("walk via %s", directory)
         listing = sorted(os.listdir(directory))
