@@ -110,7 +110,7 @@ def test_creates_packagelist(auto_container_per_test: ContainerData):
     )
 
     files = auto_container_per_test.connection.file(dest).listdir()
-    assert len(files) == 4
+    assert len(files) == 5
     for file_name in (
         f"{pkg}.{ext}"
         for pkg, ext in product(("aaa_base", "libeconf"), ("xml", "info"))
