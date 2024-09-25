@@ -61,7 +61,7 @@ class ObsGit(object):
         self.no_lfs = False
         self.enforce_bcntsynctag = False
         # for project level mode
-        self.export_files = set(["_config"])
+        self.export_files = set(["_config", "_scmsync.obsinfo"])
         self.gitsubmodules: Set[str] = set()
         self.revisions: Optional[Dict[str, str]] = None
         self.processed = {}
