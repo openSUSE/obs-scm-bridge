@@ -14,7 +14,7 @@ _AAA_BASE_URL = "https://github.com/openSUSE/aaa_base"
 _LIBECONF_URL = "https://github.com/openSUSE/libeconf"
 
 CONTAINERFILE = f"""RUN set -eux; \
-    zypper -n in python3 git-core build diff python3-PyYAML; \
+    zypper -n in python311 git-core build diff python311-PyYAML; \
     . /etc/os-release && [[ ${{NAME}} = "SLES" ]] || zypper -n in git-lfs; \
     for recom in $(rpm -q --recommends build|grep ^perl); do zypper -n in $recom; done
 
@@ -32,6 +32,7 @@ RUN mkdir -p {_RPMS_DIR}ring0 && \
     cd aaa_base && git rev-parse HEAD > /src/aaa_base
 
 COPY obs_scm_bridge /usr/bin/
+RUN sed -i 's,^#!/usr/bin/python3.*,#!/usr/bin/python3.11,' /usr/bin/obs_scm_bridge
 RUN chmod +x /usr/bin/obs_scm_bridge
 """
 

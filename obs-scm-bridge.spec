@@ -28,7 +28,8 @@ Summary:        A help service to work with git repositories in OBS
 License:        GPL-2.0-or-later
 URL:            https://github.com/openSUSE/obs-scm-bridge
 Source0:        %{name}-%{version}.tar.xz
-BuildRequires:  python3-PyYAML
+BuildRequires:  python311-PyYAML
+BuildRequires:  python311-PyYAML
 Requires:       %{build_pkg_name} >= 20211125
 Requires:       git-lfs
 # these are just recommends in build package, but we need it here
@@ -40,8 +41,8 @@ Requires:       perl(Time::Zone)
 Requires:       perl(URI)
 Requires:       perl(XML::Parser)
 Requires:       perl(YAML::LibYAML)
-Requires:       python3-PyYAML
-Recommends:     python3-packaging
+Requires:       python311-PyYAML
+Recommends:     python311-packaging
 BuildArch:      noarch
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       git
