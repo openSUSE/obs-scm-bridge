@@ -14,7 +14,7 @@ _AAA_BASE_URL = "https://github.com/openSUSE/aaa_base"
 _LIBECONF_URL = "https://github.com/openSUSE/libeconf"
 
 CONTAINERFILE = f"""RUN set -eux; \
-    zypper -n in python3 git-core build diff; \
+    zypper -n in python3 git-core build diff python3-PyYAML; \
     . /etc/os-release && [[ ${{NAME}} = "SLES" ]] || zypper -n in git-lfs; \
     for recom in $(rpm -q --recommends build|grep ^perl); do zypper -n in $recom; done
 

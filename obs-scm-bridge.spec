@@ -28,6 +28,7 @@ Summary:        A help service to work with git repositories in OBS
 License:        GPL-2.0-or-later
 URL:            https://github.com/openSUSE/obs-scm-bridge
 Source0:        %{name}-%{version}.tar.xz
+BuildRequires:  python3-PyYAML
 Requires:       %{build_pkg_name} >= 20211125
 Requires:       git-lfs
 # these are just recommends in build package, but we need it here
