@@ -32,15 +32,18 @@ export_debian_orig_from_git = '/usr/lib/build/export_debian_orig_from_git'
 pack_directories = False
 get_assets = False
 shallow_clone = True
+create_obsinfo = False
 
 if os.environ.get('DEBUG_SCM_BRIDGE') == "1":
     logging.getLogger().setLevel(logging.DEBUG)
 if os.environ.get('OBS_SERVICE_DAEMON'):
     pack_directories = True
     get_assets = True
+    create_obsinfo = True
 if os.environ.get('OSC_VERSION'):
     get_assets = True
     shallow_clone = False
+    create_obsinfo = False
 os.environ['LANG'] = "C"
 
 class ObsGit(object):
@@ -239,6 +242,9 @@ class ObsGit(object):
     # the _scmsync.obsinfo file might become obsolete again when we store entire
     # git history by default later.
     def write_obsinfo(self, outdir: str) -> None:
+        if not create_obsinfo:
+            # we write it only when importing data into the source server
+            return
         cmd = [ 'git', 'rev-parse', 'HEAD' ]
         line = self.run_cmd(cmd, cwd=outdir, fatal="git rev-parse")
         commit = line.rstrip()
