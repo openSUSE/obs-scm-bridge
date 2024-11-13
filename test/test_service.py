@@ -65,8 +65,6 @@ def test_clones_the_repository(auto_container_per_test: ContainerData):
     auto_container_per_test.connection.run_expect(
             [0], f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} --url file://{_RPMS_DIR}ring0"
     )
-    # delete _scmsync.obsinfo so that the diff succeeds
-    auto_container_per_test.connection.run_expect([0], f"rm {dest}/_scmsync.obsinfo")
     auto_container_per_test.connection.run_expect([0], f"diff {dest} {_RPMS_DIR}ring0")
 
 
@@ -111,7 +109,7 @@ def test_creates_packagelist(auto_container_per_test: ContainerData):
     )
 
     files = auto_container_per_test.connection.file(dest).listdir()
-    assert len(files) == 5
+    assert len(files) == 4
     for file_name in (
         f"{pkg}.{ext}"
         for pkg, ext in product(("aaa_base", "libeconf"), ("xml", "info"))
