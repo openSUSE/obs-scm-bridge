@@ -252,7 +252,10 @@ class ObsGit(object):
         line = self.run_cmd(cmd, cwd=outdir, fatal="git rev-parse")
         tstamp = line.rstrip()
         infofile = os.path.join(outdir, '_scmsync.obsinfo')
-        with open(infofile, "w") as obsinfo:
+        if os.path.exists(infofile):
+            logging.error("ERROR: The _scmsync.obsinfo file must not be part of the git repository.")
+            sys.exit(1)
+        with open(infofile, 'x') as obsinfo:
             obsinfo.write("mtime: " + tstamp + "\n")
             obsinfo.write("commit: " + commit + "\n")
             if self.scmtoolurl:
@@ -305,7 +308,7 @@ class ObsGit(object):
     def cpio_directory(self, directory: str) -> None:
         logging.info("create archivefile for %s", directory)
         cmd = [ download_assets, '--create-cpio', '--', directory ]
-        with open(directory + '.obscpio', 'w') as archivefile:
+        with open(directory + '.obscpio', 'x') as archivefile:
             self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
 
     def cpio_specials(self, specials: List[str]) -> None:
@@ -313,7 +316,7 @@ class ObsGit(object):
             return
         logging.info("create archivefile for specials")
         cmd = [ download_assets, '--create-cpio', '--', '.' ] + specials
-        with open('build.specials.obscpio', 'w') as archivefile:
+        with open('build.specials.obscpio', 'x') as archivefile:
             self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
 
     def cpio_directories(self) -> None:
@@ -382,7 +385,10 @@ class ObsGit(object):
     def write_info_file(self, filename: str, info: str) -> None:
         if not filename.startswith("/"):
             filename = self.outdir + "/" + filename
-        with open(filename, 'w') as infofile:
+        if os.path.exists(filename):
+            logging.error(f"ERROR: The {filename} file must not be part of the git repository.")
+            sys.exit(1)
+        with open(filename, 'x') as infofile:
             infofile.write(info + '\n')
 
     def add_service_info(self) -> None:
@@ -402,7 +408,11 @@ class ObsGit(object):
             return
         if projectscmsync:
             projecturlxml=f"""\n  <url>{escape(projectscmsync)}</url>"""
-        with open(f"{self.outdir}/{name}.xml", 'w') as xmlfile:
+        filename = f"{self.outdir}/{name}.xml"
+        if os.path.exists(filename):
+            logging.error(f"ERROR: The {name}.xml file must not be part of the git repository.")
+            sys.exit(1)
+        with open(filename, 'x') as xmlfile:
             xmlfile.write(f"""<package name="{escape(name)}">""")
             if self.enforce_bcntsynctag:
                 xmlfile.write(f"""<bcntsynctag>{escape(name)}</bcntsynctag>{projecturlxml}""")
@@ -410,13 +420,21 @@ class ObsGit(object):
 </package>\n""")
 
     def write_package_xml_local_link(self, target: str, name: str) -> None:
-        with open(f"{self.outdir}/{name}.xml", 'w') as xmlfile:
+        filename = f"{self.outdir}/{name}.xml"
+        if os.path.exists(filename):
+            logging.error(f"ERROR: The {name}.xml file must not be part of the git repository.")
+            sys.exit(1)
+        with open(filename, 'x') as xmlfile:
             xmlfile.write(f"""<package name="{escape(name)}">""")
             if self.enforce_bcntsynctag:
                 xmlfile.write(f"""<bcntsynctag>{escape(name)}</bcntsynctag>{projecturlxml}""")
             xmlfile.write(f"""</package>""")
         self.export_files.add(name + ".xml")
-        with open(f"{self.outdir}/{name}.link", 'w') as linkfile:
+        filename = f"{self.outdir}/{name}.link"
+        if os.path.exists(filename):
+            logging.error(f"ERROR: The {name}.link file must not be part of the git repository.")
+            sys.exit(1)
+        with open(filename, 'x') as linkfile:
             linkfile.write(f"""<link package="{escape(target)}" cicount="copy" />""")
         self.export_files.add(name + ".link")
 

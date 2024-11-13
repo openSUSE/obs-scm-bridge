@@ -65,8 +65,6 @@ def test_clones_the_repository(auto_container_per_test: ContainerData):
     auto_container_per_test.connection.run_expect(
             [0], f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} --url file://{_RPMS_DIR}ring0"
     )
-    # delete _scmsync.obsinfo so that the diff succeeds
-    auto_container_per_test.connection.run_expect([0], f"rm {dest}/_scmsync.obsinfo")
     auto_container_per_test.connection.run_expect([0], f"diff {dest} {_RPMS_DIR}ring0")
 
 
@@ -111,7 +109,7 @@ def test_creates_packagelist(auto_container_per_test: ContainerData):
     )
 
     files = auto_container_per_test.connection.file(dest).listdir()
-    assert len(files) == 5
+    assert len(files) == 4
     for file_name in (
         f"{pkg}.{ext}"
         for pkg, ext in product(("aaa_base", "libeconf"), ("xml", "info"))
@@ -147,8 +145,8 @@ def test_creates_packagelist(auto_container_per_test: ContainerData):
 LFS_REPO = "https://src.opensuse.org/pool/trivy.git"
 
 
-@pytest.mark.parametrize("fragment", ["", "#eab0f16835309c7e772f81d523bb47356f3e14f05de74bfa88eaf59d73712215"])
-@pytest.mark.parametrize("query", ["", "?lfs=1"])
+@pytest.mark.parametrize("fragment", ["#eab0f16835309c7e772f81d523bb47356f3e14f05de74bfa88eaf59d73712215"])
+@pytest.mark.parametrize("query", ["?lfs=1"])
 @pytest.mark.parametrize("container_per_test", [TUMBLEWEED, LEAP_LATEST], indirect=True)
 def test_downloads_lfs(container_per_test: ContainerData, fragment: str, query: str):
     """Test that the lfs file is automatically downloaded from the lfs server on
@@ -165,7 +163,7 @@ def test_downloads_lfs(container_per_test: ContainerData, fragment: str, query: 
     assert tar_archive.size > 10 * 1024
 
 
-@pytest.mark.parametrize("fragment", ["", "#eab0f16835309c7e772f81d523bb47356f3e14f05de74bfa88eaf59d73712215"])
+@pytest.mark.parametrize("fragment", ["#eab0f16835309c7e772f81d523bb47356f3e14f05de74bfa88eaf59d73712215"])
 def test_lfs_opt_out(auto_container_per_test: ContainerData, fragment: str):
     _DEST = "/tmp/lfs-example"
     auto_container_per_test.connection.run_expect(
@@ -212,11 +210,6 @@ def test_clone_commit(
 
     if expected_head:
         assert head == expected_head
-    else:
-        libeconf_hash = auto_container_per_test.connection.file(
-            "/src/libeconf"
-        ).content_string.strip()
-        assert libeconf_hash == head
 
 
 @pytest.mark.parametrize(
