@@ -33,6 +33,7 @@ pack_directories = False
 get_assets = False
 shallow_clone = True
 create_obsinfo = False
+rewrite_url_to_ssh = False
 
 if os.environ.get('DEBUG_SCM_BRIDGE') == "1":
     logging.getLogger().setLevel(logging.DEBUG)
@@ -44,6 +45,7 @@ if os.environ.get('OSC_VERSION'):
     get_assets = True
     shallow_clone = False
     create_obsinfo = False
+    rewrite_url_to_ssh = True
 os.environ['LANG'] = "C"
 
 class ObsGit(object):
@@ -107,6 +109,21 @@ class ObsGit(object):
         scmtoolurl = self.url.copy()
         if scmtoolurl[0] and scmtoolurl[0][0:4] == 'git+':
             scmtoolurl[0] = scmtoolurl[0][4:]
+        # we want to switch to ssh as the user is likely providing his
+        # access via ssh pub key already.
+        # Unfortunality there is no generic way to rewrite the url as
+        # it depends on the installation.
+        # For now we hard code our instances, but this needs to become
+        # configurable or we need to detect it by asking the server
+        # somehow.
+        # Expect this to be moved to a config file
+        if rewrite_url_to_ssh and scmtoolurl[0] == 'https':
+            if scmtoolurl[1] == 'src.suse.de':
+                scmtoolurl[1] = 'gitea@src.suse.de'
+                scmtoolurl[0] = 'ssh'
+            elif scmtoolurl[1] == 'src.opensuse.org':
+                scmtoolurl[1] = 'gitea@src.opensuse.org'
+                scmtoolurl[0] = 'ssh'
         self.scmtoolurl = urllib.parse.urlunparse(scmtoolurl)
 
     def add_critical_instance(
