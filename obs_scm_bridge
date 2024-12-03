@@ -224,7 +224,7 @@ class ObsGit(object):
             cmd += [ '--depth', '1' ]
         if include_submodules:
             # try to select specific submodule first when a subdir is given and fall back
-            if self.subdir is None or self.run_cmd_nonfatal(cmd + [ "--recurse-submodules=" + self.subdir ])[0] != 0:
+            if not self.subdir or self.run_cmd_nonfatal(cmd + [ "--recurse-submodules=" + self.subdir ])[0] != 0:
                cmd += [ '--recurse-submodules' ]
                self.run_cmd(cmd, fatal="git fetch")
         else:
@@ -532,7 +532,10 @@ class ObsGit(object):
         # add subdir parameter to url
         url = self.url.copy()
         query = urllib.parse.parse_qs(url[4])
-        query['subdir'] = subdir + directory
+        if self.subdir:
+            query['subdir'] = self.subdir + '/' + subdir + directory
+        else:
+            query['subdir'] = subdir + directory
         url[4] = urllib.parse.urlencode(query)
         if self.revision:
             url[5] = self.revision
