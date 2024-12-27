@@ -107,5 +107,3 @@ TODO
    they do not belong to the git repository
     auto extending .gitignore? (esp. when downloading asset files?)
 
- * make cpio generation bit identical (avoiding mtime from clone)
-

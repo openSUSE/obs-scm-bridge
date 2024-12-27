@@ -235,3 +235,13 @@ def test_fetch_depth(
         assert history_length == 1
     else:
         assert history_length > 1
+
+def test_cpio_dir_hash(auto_container_per_test: ContainerData):
+    dest = "/tmp/scm-bridge/"
+    auto_container_per_test.connection.run_expect(
+        [0],
+        f"OBS_SERVICE_DAEMON=1 {_OBS_SCM_BRIDGE_CMD} --outdir {dest} "
+        f"--url https://github.com/openSUSE/obs-scm-bridge#9907826c17ca7b650c4040e9c2b45bfef4d9821f",
+    )
+    sha = auto_container_per_test.connection.run_expect([0], f"sha256sum {dest}/test.obscpio").stdout.strip().split()[0]
+    assert sha == "8a98bf255835fb83733f96019b07ef7ac15a56b298872f5eae3d9ffd9b0b3556"

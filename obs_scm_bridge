@@ -24,6 +24,8 @@ from html import escape
 from typing import Dict, List, Optional, Set, TextIO, Tuple, Union
 import urllib.parse
 import configparser
+from pathlib import Path
+from itertools import chain
 
 download_assets = '/usr/lib/build/download_assets'
 critical_instances_config = "/etc/obs/services/scm-bridge/critical-instances"
@@ -58,7 +60,6 @@ class ObsGit(object):
         self.subdir   = None
         self.projectscmsync = projectscmsync
         self.keep_meta = False
-        self.enforced_deep_clone = False
         self.arch = []
         self.critical_git_servers = []
         self.onlybuild = None
@@ -86,7 +87,6 @@ class ObsGit(object):
             del query['enforce_bcntsynctag']
             self.url[4] = urllib.parse.urlencode(query)
         if "keepmeta" in query:
-            self.enforced_deep_clone = True
             self.keep_meta = True
             del query['keepmeta']
             self.url[4] = urllib.parse.urlencode(query)
@@ -284,9 +284,58 @@ class ObsGit(object):
             if self.projectscmsync:
                 obsinfo.write("projectscmsync: " + self.projectscmsync + "\n")
 
-    def clone(self, include_submodules: bool=False) -> None:
+    def do_set_times(self, clonedir: str) -> None:
+        cmd = [ 'git', 'ls-files' ]
+        files = self.run_cmd(cmd, fatal="git ls-files", cwd=clonedir).splitlines()
+        # last parent is always cwd here, skip it
+        dirs = set(chain.from_iterable([list(Path(f).parents)[:-1] for f in files]))
+        files.extend([str(d) for d in dirs])
+        files = set(files)
+        cmd = [ 'git', 'log', '--raw', '--relative', '--pretty=format:%ct' ]
+        gitlog = self.run_cmd(cmd, fatal="git log", cwd=clonedir).splitlines()
+        commit_time = None
+        for line in gitlog:
+            if len(files) == 0:
+                return
+            if len(line) == 0:
+                continue
+            if line[0] != ':':
+                commit_time = int(line)
+                continue
+            entry = line.split()
+            mode = entry[4][0]
+            to_set = [entry[-1]]
+            if mode != 'M' or entry[0][1:] == entry[1]:
+                # new/deleted file or mode change, set parents directory time
+                to_set.extend([str(p) for p in list(Path(entry[-1]).parents)[:-1]])
+            if mode == 'R':
+                # rename, update src parent directory time
+                to_set.extend([str(p) for p in list(Path(entry[-2]).parents)[:-1]])
+            for f in to_set:
+                try:
+                    files.remove(f)
+                    logging.debug("Set time for %s at %d", os.path.join(clonedir, f), commit_time)
+                    os.utime(os.path.join(clonedir, f), (commit_time, commit_time), follow_symlinks=False)
+                except KeyError:
+                    pass
+        if len(files) != 0:
+            logging.warning("leftover files: %s", files)
+
+    def set_times(self, clonedir: str, include_submodules: bool) -> None:
+        self.do_set_times(clonedir)
+        if not include_submodules:
+            return
+        cmd = [ 'git', 'submodule', 'status', '--recursive', '.']
+        submodules = self.run_cmd(cmd, fatal="git submodule status", cwd=clonedir).splitlines()
+        for s in submodules:
+            path = os.path.join(clonedir, s.split()[1])
+            self.do_set_times(path)
+
+    def clone(self, include_submodules: bool=False, set_times: bool=False) -> None:
         if not self.subdir:
             self.do_clone(self.outdir, include_submodules=include_submodules)
+            if set_times:
+                self.set_times(self.outdir, include_submodules=include_submodules)
             self.write_obsinfo(self.outdir)
             return
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
@@ -311,6 +360,8 @@ class ObsGit(object):
         if not os.path.isdir(fromdir):
             print("ERROR: subdir " + self.subdir + " does not exist")
             sys.exit(1)
+        if set_times:
+            self.set_times(fromdir, include_submodules=include_submodules)
         if not os.path.isdir(self.outdir):
             os.makedirs(self.outdir)
         for name in os.listdir(fromdir):
@@ -667,7 +718,10 @@ if __name__ == '__main__':
         obsgit.generate_package_xml_files()
         sys.exit(0)
 
-    obsgit.clone(include_submodules=True)
+    if pack_directories:
+        # We need deep clone to set times for cpio
+        shallow_clone = False
+    obsgit.clone(include_submodules=True, set_times=pack_directories)
 
     if pack_directories:
         obsgit.add_service_info()
