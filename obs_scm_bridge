@@ -210,6 +210,19 @@ class ObsGit(object):
             sys.exit(returncode)
         return output
 
+    def do_set_sparse_checkout(self, outdir: str) -> None:
+        self.run_cmd([ 'git', '-C', outdir, 'sparse-checkout', 'set', self.subdir ], fatal="git sparse-checkout")
+
+    def do_checkout(self, outdir: str, branch: str, include_submodules: bool=False) -> None:
+        env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
+        cmd = [ 'git', '-C', outdir, 'checkout', '-q', branch]
+        self.run_cmd(cmd, fatal="git checkout", env=env)
+        if include_submodules:
+            cmd = [ 'git', '-C', outdir, 'submodule', 'init' ]
+            self.run_cmd(cmd, fatal="git submodule init", env=env)
+            cmd = [ 'git', '-C', outdir, 'submodule', 'update' ]
+            self.run_cmd(cmd, fatal="git submodule update", env=env)
+
     def do_clone_commit(self, outdir: str, include_submodules: bool=False) -> None:
         assert self.revision, "no revision is set but do_clone_commit was called"
         objectformat='--object-format=sha1'
@@ -222,6 +235,8 @@ class ObsGit(object):
         cmd = [ 'git', '-C', outdir, 'fetch', 'origin', self.revision ]
         if shallow_clone:
             cmd += [ '--depth', '1' ]
+        if self.subdir and shallow_clone:
+            cmd += [ '--filter=blob:none' ]
         if include_submodules:
             # try to select specific submodule first when a subdir is given and fall back
             if not self.subdir or self.run_cmd_nonfatal(cmd + [ "--recurse-submodules=" + self.subdir ])[0] != 0:
@@ -229,14 +244,9 @@ class ObsGit(object):
                self.run_cmd(cmd, fatal="git fetch")
         else:
             self.run_cmd(cmd, fatal="git fetch")
-        cmd = [ 'git', '-C', outdir, 'checkout', '-q', self.revision ]
-        env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
-        self.run_cmd(cmd, fatal="git checkout", env=env)
-        if include_submodules:
-            cmd = [ 'git', '-C', outdir, 'submodule', 'init' ]
-            self.run_cmd(cmd, fatal="git submodule init")
-            cmd = [ 'git', '-C', outdir, 'submodule', 'update' ]
-            self.run_cmd(cmd, fatal="git submodule update")
+        if self.subdir and shallow_clone:
+            self.do_set_sparse_checkout(outdir)
+        self.do_checkout(outdir, self.revision, include_submodules=include_submodules)
 
     def do_clone(self, outdir: str, include_submodules: bool=False) -> None:
         if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
@@ -250,11 +260,16 @@ class ObsGit(object):
                cmd += [ '--recurse-submodules' ]
         if shallow_clone:
             cmd += [ '--depth', '1' ]
+        if self.subdir and shallow_clone:
+            cmd += [ '--filter=blob:none', '--no-checkout' ]
         if self.revision:
             cmd.insert(2, '-b')
             cmd.insert(3, self.revision)
         env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
         self.run_cmd(cmd, fatal="git clone", env=env)
+        if self.subdir and shallow_clone:
+            self.do_set_sparse_checkout(outdir)
+            self.do_checkout(outdir, 'HEAD', include_submodules=include_submodules)
 
     # the _scmsync.obsinfo file might become obsolete again when we store entire
     # git history by default later.
