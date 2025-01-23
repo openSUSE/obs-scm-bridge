@@ -102,6 +102,11 @@ class ObsGit(object):
         if self.url[5]:
             self.revision = self.url[5]
             self.url[5] = ''
+        # we cannot keep the meta in subdir mode and we can always
+        # do a shallow clone
+        if self.subdir:
+            shallow_clone = True
+            self.keep_meta = False
         # if we keep the meta files we always want a deep clone
         if self.keep_meta:
             shallow_clone = False
@@ -309,15 +314,15 @@ class ObsGit(object):
         fromdir = os.path.join(clonedir, self.subdir)
         if os.path.islink(fromdir):
             target = os.readlink(fromdir).rstrip('/') # this is no recursive lookup, but is there a usecase?
-            if '/' in target:
+            if not target or '/' in target or target.startswith('.'):
                 print("ERROR: only local links are supported: " + self.subdir)
                 sys.exit(1)
             # switch subdir and clone again
             self.subdir=target
             shutil.rmtree(clonedir)
             clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
-            fromdir = os.path.join(clonedir, self.subdir)
             self.do_clone(clonedir, include_submodules=include_submodules)
+            fromdir = os.path.join(clonedir, self.subdir)
             self.write_obsinfo(clonedir)
 
         if not os.path.realpath(fromdir+'/').startswith(os.path.realpath(clonedir+'/')):
@@ -534,56 +539,58 @@ class ObsGit(object):
         self.export_files.add(package_name + ".xml")
         self.export_files.add(package_name + ".info")
 
-    def process_package_subdirectory(self, directory: str, subdir: str) -> None:
-        info = self.get_subdir_info(subdir + directory)
-        shutil.rmtree(subdir + directory)
-        if not self._REGEXP.match(directory):
-            logging.warn("directory name contains invalid char: %s", directory)
+    def process_package_subdirectory(self, name: str, subdir: str, clonedir: str) -> None:
+        # current directory is self.outdir
+        if not self._REGEXP.match(name):
+            logging.warn("directory name contains invalid char: %s", name)
             return
 
         # add subdir info file
-        self.write_info_file(directory + ".info", info)
-        self.export_files.add(directory + ".info")
+        info = self.get_subdir_info(clonedir + '/' + subdir + name)
+        self.write_info_file(name + ".info", info)
+        self.export_files.add(name + ".info")
 
         # add subdir parameter to url
         url = self.url.copy()
         query = urllib.parse.parse_qs(url[4])
         if self.subdir:
-            query['subdir'] = self.subdir + '/' + subdir + directory
+            query['subdir'] = self.subdir + '/' + subdir + name
         else:
-            query['subdir'] = subdir + directory
+            query['subdir'] = subdir + name
         url[4] = urllib.parse.urlencode(query)
         if self.revision:
             url[5] = self.revision
 
-        self.write_package_xml_file(directory, urllib.parse.urlunparse(url))
-        self.export_files.add(directory + ".xml")
+        self.write_package_xml_file(name, urllib.parse.urlunparse(url))
+        self.export_files.add(name + ".xml")
 
-    def generate_package_xml_files(self) -> None:
-        self.generate_package_xml_files_of_directory(self.outdir)
+    def generate_package_xml_files(self, clonedir) -> None:
+        if not os.path.isdir(self.outdir):
+            os.makedirs(self.outdir)
+        os.chdir(self.outdir)
+        self.generate_package_xml_files_of_directory('', clonedir)
 
-    def generate_package_xml_files_of_directory(self, directory) -> None:
-        logging.debug("check %s", directory)
+    def generate_package_xml_files_of_directory(self, subdir, clonedir) -> None:
+        directory = (clonedir + '/' + subdir).rstrip('/')
+        logging.debug("check %s (subdir=%s)", directory, subdir)
+
         subdir_yml = None
         if os.path.isfile(directory + '/_subdirs'):
             with open(directory + '/_subdirs') as stream:
-               subdir_yml = yaml.safe_load(stream)
-               for subdir in subdir_yml['subdirs']:
-                   self.generate_package_xml_files_of_directory(directory + '/' + subdir)
-               if not 'toplevel' in subdir_yml or subdir_yml['toplevel'] != 'include':
-                   return
-
-        subdir = directory.removeprefix(self.outdir).lstrip("/")
-        if len(subdir) > 0:
-            subdir = subdir + '/'
-
-        os.chdir(self.outdir)
+                subdir_yml = yaml.safe_load(stream)
+            for newsubdir in subdir_yml['subdirs']:
+                if newsubdir:
+                    self.processed[subdir + newsubdir + '/'] = True
+                    self.generate_package_xml_files_of_directory(subdir + newsubdir + '/', clonedir)
+            if 'toplevel' not in subdir_yml or subdir_yml['toplevel'] != 'include':
+                return
 
         # find all top level git submodules
-        gsmconfig = None
-        if os.path.isfile('.gitmodules'):
+        if '.gitmodules' not in self.processed and os.path.isfile(clonedir + '.gitmodules'):
+            self.processed['.gitmodules'] = True
+            gsmconfig = None
             gsmconfig = configparser.ConfigParser()
-            gsmconfig.read('.gitmodules')
+            gsmconfig.read(clonedir + '.gitmodules')
             for section in gsmconfig.sections():
                 if not 'path' in gsmconfig[section]:
                     logging.warn("path not defined for git submodule " + section)
@@ -597,44 +604,37 @@ class ObsGit(object):
         logging.debug("walk via %s", directory)
         listing = sorted(os.listdir(directory))
         for name in listing:
-            fname = subdir + name
+            if name in self.processed:
+                continue                # already handled
+            fname = directory + '/' + name
             if os.path.islink(fname):
-                if name in self.processed:
-                    os.unlink(fname)
-                    continue
                 target = os.readlink(fname).rstrip('/') # this is no recursive lookup, but is there a usecase?
-                if '/' in target:
+                if not target or '/' in target or target.startswith('.'):
                     logging.warn("only local links are supported, skipping: " + name)
                     continue
-                if target in self.gitsubmodules or os.path.isdir(target):
+                if target in self.gitsubmodules or os.path.isdir(directory + '/' + target):
                     self.write_package_xml_local_link(target, name)
                     self.processed[name] = True
-                    os.unlink(name)
                 else:
                     logging.debug("skipping symlink to a non git submodule %s -> %s", name, target)
-                    os.unlink(name)
                 continue
 
-            if name == '.git' and not self.keep_meta:
-                shutil.rmtree(fname)
-                continue
-            if os.path.islink(fname):
-                continue
+            if name == '.git':
+                if self.keep_meta and subdir == '':
+                    shutil.move(fname, '.')
+                self.processed[name] = True
             elif os.path.isdir(fname):
                 if name in self.gitsubmodules:
-                    # already handled as git submodule
-                    shutil.rmtree(name)
-                    continue
+                    continue            # already handled as git submodule
                 if name in self.processed:
                     continue
-                if subdir_yml and name in subdir_yml['subdirs']:
-                    shutil.rmtree(name)
-                    continue
-                self.process_package_subdirectory(name, subdir)
+                if (subdir + name + '/') in self.processed:
+                    continue            # already handled in _subdir loop
+                self.process_package_subdirectory(name, subdir, clonedir)
                 self.processed[name] = True
-            else:
-                if not name in self.export_files:
-                    os.unlink(name)
+            elif name in self.export_files:
+                shutil.move(fname, '.')
+                self.processed[name] = True
 
 if __name__ == '__main__':
 
@@ -678,8 +678,11 @@ if __name__ == '__main__':
         obsgit.setup_credentials(credentials_config)
 
     if project_mode == 'true' or project_mode == '1':
-        obsgit.clone()
-        obsgit.generate_package_xml_files()
+        clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
+        obsgit.do_clone(clonedir)
+        obsgit.write_obsinfo(clonedir)
+        obsgit.generate_package_xml_files(clonedir)
+        shutil.rmtree(clonedir)
         sys.exit(0)
 
     obsgit.clone(include_submodules=True)
