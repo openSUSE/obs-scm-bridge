@@ -34,6 +34,7 @@ get_assets = False
 shallow_clone = True
 create_obsinfo = False
 rewrite_url_to_ssh = False
+write_obsinfo_with_subdir = True
 
 if os.environ.get('DEBUG_SCM_BRIDGE') == "1":
     logging.getLogger().setLevel(logging.DEBUG)
@@ -71,6 +72,7 @@ class ObsGit(object):
         self.revisions: Optional[Dict[str, str]] = None
         self.processed = {}
         self.git_store = None
+        self.shallow_clone = shallow_clone
 
         query = urllib.parse.parse_qs(self.url[4])
         if "subdir" in query:
@@ -105,11 +107,15 @@ class ObsGit(object):
         # we cannot keep the meta in subdir mode and we can always
         # do a shallow clone
         if self.subdir:
-            shallow_clone = True
+            self.shallow_clone = True
+            # we cannot do a shallow clone if we want the commit data
+            # for a specific directory
+            if write_obsinfo_with_subdir:
+                self.shallow_clone = False
             self.keep_meta = False
         # if we keep the meta files we always want a deep clone
         if self.keep_meta:
-            shallow_clone = False
+            self.shallow_clone = False
         # scmtoolurl is the url we pass to the the scm tool
         scmtoolurl = self.url.copy()
         if scmtoolurl[0] and scmtoolurl[0][0:4] == 'git+':
@@ -238,9 +244,9 @@ class ObsGit(object):
         cmd = [ 'git', '-C', outdir, 'remote', 'add', 'origin', self.scmtoolurl ]
         self.run_cmd(cmd, fatal="git remote add origin")
         cmd = [ 'git', '-C', outdir, 'fetch', 'origin', self.revision ]
-        if shallow_clone:
+        if self.shallow_clone:
             cmd += [ '--depth', '1' ]
-        if self.subdir and shallow_clone:
+        if self.subdir:
             cmd += [ '--filter=blob:none' ]
         if include_submodules:
             # try to select specific submodule first when a subdir is given and fall back
@@ -249,7 +255,7 @@ class ObsGit(object):
                self.run_cmd(cmd, fatal="git fetch")
         else:
             self.run_cmd(cmd, fatal="git fetch")
-        if self.subdir and shallow_clone:
+        if self.subdir:
             self.do_set_sparse_checkout(outdir)
         self.do_checkout(outdir, self.revision, include_submodules=include_submodules)
 
@@ -263,32 +269,37 @@ class ObsGit(object):
                cmd += [ "--recurse-submodules=" + self.subdir ]
             else:
                cmd += [ '--recurse-submodules' ]
-        if shallow_clone:
+        if self.shallow_clone:
             cmd += [ '--depth', '1' ]
-        if self.subdir and shallow_clone:
+        if self.subdir:
             cmd += [ '--filter=blob:none', '--no-checkout' ]
         if self.revision:
             cmd.insert(2, '-b')
             cmd.insert(3, self.revision)
         env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
         self.run_cmd(cmd, fatal="git clone", env=env)
-        if self.subdir and shallow_clone:
+        if self.subdir:
             self.do_set_sparse_checkout(outdir)
             self.do_checkout(outdir, 'HEAD', include_submodules=include_submodules)
 
     # the _scmsync.obsinfo file might become obsolete again when we store entire
     # git history by default later.
-    def write_obsinfo(self, outdir: str) -> None:
+    def write_obsinfo(self, clonedir: str) -> None:
         if not create_obsinfo:
             # we write it only when importing data into the source server
             return
-        cmd = [ 'git', 'rev-parse', 'HEAD' ]
-        line = self.run_cmd(cmd, cwd=outdir, fatal="git rev-parse")
-        commit = line.rstrip()
-        cmd = [ 'git', 'log', '-n1', '--date=format:%Y%m%d', '--no-show-signature', '--pretty=format:%ct' ]
-        line = self.run_cmd(cmd, cwd=outdir, fatal="git rev-parse")
-        tstamp = line.rstrip()
-        infofile = os.path.join(outdir, '_scmsync.obsinfo')
+        if not self.subdir:
+            cmd = [ 'git', 'rev-parse', 'HEAD' ]
+            line = self.run_cmd(cmd, cwd=clonedir, fatal="git rev-parse")
+            commit = line.rstrip()
+            cmd = [ 'git', 'log', '-n1', '--date=format:%Y%m%d', '--no-show-signature', '--pretty=format:%ct' ]
+            line = self.run_cmd(cmd, cwd=clonedir, fatal="git rev-parse")
+            tstamp = line.rstrip()
+        else:
+            cmd = [ 'git', 'log', '-n1', '--no-show-signature', '--pretty=format:%H %ct', '--', self.subdir]
+            line = self.run_cmd(cmd, cwd=clonedir, fatal="git log")
+            commit, tstamp = line.split()
+        infofile = os.path.join(self.outdir, '_scmsync.obsinfo')
         if os.path.lexists(infofile):
             logging.error("ERROR: The _scmsync.obsinfo file must not be part of the git repository.")
             sys.exit(1)
@@ -304,15 +315,31 @@ class ObsGit(object):
             if self.projectscmsync:
                 obsinfo.write("projectscmsync: " + self.projectscmsync + "\n")
 
-    def clone(self, include_submodules: bool=False) -> None:
+    def check_subdir(self, clonedir: str, subdir: str):
+        fromdir = os.path.join(clonedir, subdir)
+        if not os.path.realpath(fromdir+'/').startswith(os.path.realpath(clonedir+'/')):
+            print("ERROR: subdir " + subdir + " is not below clone directory")
+            sys.exit(1)
+        if not os.path.isdir(fromdir):
+            print("ERROR: subdir " + subdir + " does not exist")
+            sys.exit(1)
+
+    def clone(self, include_submodules: bool=False, no_local_link: bool=False, write_service_info: bool=False) -> None:
         if not self.subdir:
             self.do_clone(self.outdir, include_submodules=include_submodules)
             self.write_obsinfo(self.outdir)
+            if write_service_info:
+                self.write_service_info(self.outdir)
             return
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
         self.do_clone(clonedir, include_submodules=include_submodules)
+        self.check_subdir(clonedir, self.subdir)
+
         fromdir = os.path.join(clonedir, self.subdir)
         if os.path.islink(fromdir):
+            if no_local_link:
+                print("ERROR: local link points to another local link: " + self.subdir)
+                sys.exit(1)
             target = os.readlink(fromdir).rstrip('/') # this is no recursive lookup, but is there a usecase?
             if not target or '/' in target or target.startswith('.'):
                 print("ERROR: only local links are supported: " + self.subdir)
@@ -320,19 +347,15 @@ class ObsGit(object):
             # switch subdir and clone again
             self.subdir=target
             shutil.rmtree(clonedir)
-            clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
-            self.do_clone(clonedir, include_submodules=include_submodules)
-            fromdir = os.path.join(clonedir, self.subdir)
-            self.write_obsinfo(clonedir)
+            self.clone(include_submodules=include_submodules, no_local_link=True, write_service_info=write_service_info)
+            return
 
-        if not os.path.realpath(fromdir+'/').startswith(os.path.realpath(clonedir+'/')):
-            print("ERROR: subdir is not below clone directory")
-            sys.exit(1)
-        if not os.path.isdir(fromdir):
-            print("ERROR: subdir " + self.subdir + " does not exist")
-            sys.exit(1)
         if not os.path.isdir(self.outdir):
             os.makedirs(self.outdir)
+        if write_obsinfo_with_subdir:
+            self.write_obsinfo(clonedir)
+        if write_service_info:
+            self.write_service_info(clonedir)
         for name in os.listdir(fromdir):
             shutil.move(os.path.join(fromdir, name), self.outdir)
         shutil.rmtree(clonedir)
@@ -414,10 +437,15 @@ class ObsGit(object):
             logging.info("exporting debian origtar")
             self.run_cmd(cmd, fatal="debian origtar export")
 
-    def get_subdir_info(self, dir: str) -> str:
-        cmd = [ download_assets, '--show-dir-srcmd5', '--', dir ]
-        info = self.run_cmd(cmd, fatal="download_assets --show-dir-srcmd5")
-        return info.strip()
+    def get_subdir_info(self, clonedir: str, path: str) -> str:
+        cmd = [ 'git', '-C', clonedir, 'ls-tree', '-d', 'HEAD', path ]
+        output = self.run_cmd(cmd, fatal="git ls-tree")
+        for line in output.splitlines():
+            lstree = line.split(maxsplit=4)
+            if len(lstree[2]) >= 40:
+               return lstree[2]
+        logging.error(f"ERROR: could not determine tree info of {path}")
+        sys.exit(1)
 
     def write_info_file(self, filename: str, info: str) -> None:
         if not filename.startswith("/"):
@@ -428,12 +456,13 @@ class ObsGit(object):
         with open(filename, 'x') as infofile:
             infofile.write(info + '\n')
 
-    def add_service_info(self) -> None:
+    def write_service_info(self, clonedir: str) -> None:
         info = None
         if self.subdir:
-            info = self.get_subdir_info(self.outdir)
+            #info = self.get_subdir_info(self.outdir, '')
+            info = self.get_subdir_info(clonedir, self.subdir)
         else:
-            cmd = [ 'git', '-C', self.outdir, 'show', '-s', '--pretty=format:%H', 'HEAD' ]
+            cmd = [ 'git', '-C', clonedir, 'show', '-s', '--pretty=format:%H', 'HEAD' ]
             info = self.run_cmd(cmd, fatal="git show -s HEAD")
             info = info.strip()
         if info:
@@ -546,17 +575,14 @@ class ObsGit(object):
             return
 
         # add subdir info file
-        info = self.get_subdir_info(clonedir + '/' + subdir + name)
+        info = self.get_subdir_info(clonedir, subdir + name)
         self.write_info_file(name + ".info", info)
         self.export_files.add(name + ".info")
 
         # add subdir parameter to url
         url = self.url.copy()
         query = urllib.parse.parse_qs(url[4])
-        if self.subdir:
-            query['subdir'] = self.subdir + '/' + subdir + name
-        else:
-            query['subdir'] = subdir + name
+        query['subdir'] = subdir + name
         url[4] = urllib.parse.urlencode(query)
         if self.revision:
             url[5] = self.revision
@@ -564,11 +590,19 @@ class ObsGit(object):
         self.write_package_xml_file(name, urllib.parse.urlunparse(url))
         self.export_files.add(name + ".xml")
 
-    def generate_package_xml_files(self, clonedir) -> None:
+    def generate_project_files(self) -> None:
+        clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
+        self.do_clone(clonedir)
+        subdir = ''
+        if self.subdir:
+            self.check_subdir(clonedir, self.subdir)
+            subdir = self.subdir + '/'
         if not os.path.isdir(self.outdir):
             os.makedirs(self.outdir)
+        self.write_obsinfo(clonedir)
         os.chdir(self.outdir)
-        self.generate_package_xml_files_of_directory('', clonedir)
+        self.generate_package_xml_files_of_directory(subdir, clonedir)
+        shutil.rmtree(clonedir)
 
     def generate_package_xml_files_of_directory(self, subdir, clonedir) -> None:
         directory = (clonedir + '/' + subdir).rstrip('/')
@@ -579,9 +613,10 @@ class ObsGit(object):
             with open(directory + '/_subdirs') as stream:
                 subdir_yml = yaml.safe_load(stream)
             for newsubdir in subdir_yml['subdirs']:
-                if newsubdir:
-                    self.processed[subdir + newsubdir + '/'] = True
-                    self.generate_package_xml_files_of_directory(subdir + newsubdir + '/', clonedir)
+                if not newsubdir:
+                    continue
+                self.processed[subdir + newsubdir + '/'] = True
+                self.generate_package_xml_files_of_directory(subdir + newsubdir + '/', clonedir)
             if 'toplevel' not in subdir_yml or subdir_yml['toplevel'] != 'include':
                 return
 
@@ -678,17 +713,11 @@ if __name__ == '__main__':
         obsgit.setup_credentials(credentials_config)
 
     if project_mode == 'true' or project_mode == '1':
-        clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
-        obsgit.do_clone(clonedir)
-        obsgit.write_obsinfo(clonedir)
-        obsgit.generate_package_xml_files(clonedir)
-        shutil.rmtree(clonedir)
+        obsgit.generate_project_files()
         sys.exit(0)
 
-    obsgit.clone(include_submodules=True)
+    obsgit.clone(include_submodules=True, write_service_info=pack_directories)
 
-    if pack_directories:
-        obsgit.add_service_info()
     if get_assets:
         obsgit.get_assets()
         obsgit.get_debian_origtar()
