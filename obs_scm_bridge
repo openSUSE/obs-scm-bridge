@@ -60,7 +60,6 @@ class ObsGit(object):
         self.subdir   = None
         self.projectscmsync = projectscmsync
         self.keep_meta = False
-        self.enforced_deep_clone = False
         self.arch = []
         self.critical_git_servers = []
         self.onlybuild = None
@@ -89,7 +88,6 @@ class ObsGit(object):
             del query['enforce_bcntsynctag']
             self.url[4] = urllib.parse.urlencode(query)
         if "keepmeta" in query:
-            self.enforced_deep_clone = True
             self.keep_meta = True
             del query['keepmeta']
             self.url[4] = urllib.parse.urlencode(query)
@@ -597,16 +595,16 @@ class ObsGit(object):
 
     def generate_project_files(self) -> None:
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
-        self.do_clone(clonedir)
         self.clonedir = clonedir
-        subdir = ''
+        self.do_clone(clonedir)
         if self.subdir:
             self.check_subdir(self.subdir)
-            subdir = self.subdir + '/'
         if not os.path.isdir(self.outdir):
             os.makedirs(self.outdir)
-        self.write_obsinfo()
+        if not self.subdir or write_obsinfo_with_subdir:
+            self.write_obsinfo()
         os.chdir(self.outdir)
+        subdir = self.subdir + '/' if self.subdir else ''
         self.generate_package_xml_files_of_directory(subdir)
         shutil.rmtree(clonedir)
         self.clonedir = None
@@ -615,12 +613,14 @@ class ObsGit(object):
         directory = (self.clonedir + '/' + subdir).rstrip('/')
         logging.debug("check %s (subdir=%s)", directory, subdir)
 
-        subdir_yml = None
         if os.path.isfile(directory + '/_subdirs'):
+            subdir_yml = None
             with open(directory + '/_subdirs') as stream:
                 subdir_yml = yaml.safe_load(stream)
             for newsubdir in subdir_yml['subdirs']:
                 if not newsubdir:
+                    continue
+                if (subdir + newsubdir + '/') in self.processed:
                     continue
                 self.processed[subdir + newsubdir + '/'] = True
                 self.generate_package_xml_files_of_directory(subdir + newsubdir + '/')
