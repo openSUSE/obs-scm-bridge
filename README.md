@@ -32,7 +32,7 @@ element inside the package meta.
 For doing a local checkout use a 1.0 release candidate of osc. This version allows
 you to do
 
-# osc co $project <$package>
+$ osc co $project [$package]
 
 which will create a git repository inside of the classic osc checkout.
 
@@ -58,11 +58,11 @@ your url with
 
  * `lfs=0` to skip downloading LFS assets
 
- * arch=<ARCH> CGI parameter to specify arch specific assets downloads
+ * arch=ARCH CGI parameter to specify arch specific assets downloads
 
  * keepmeta=1 CGI parameter to include full git vcs data (.git directory)
 
- * subdir=<DIRECTORY> CGI parameter to package only a subdirectory
+ * subdir=DIRECTORY CGI parameter to package only a subdirectory
 
 Special directives for entire projects
 ======================================
@@ -70,7 +70,7 @@ Special directives for entire projects
  * projectmode=1 is switching project mode on. The bridge will just prepare
                  package meta files for each subdirectory.
 
- * onlybuild=<DIRECTORY> can be used to specify to only export defined packages
+ * onlybuild=DIRECTORY   can be used to specify to only export defined packages
                          without modifing the git source. The parameter can be
                          used multiple times to collect multiple.
 
@@ -89,12 +89,12 @@ These configuration files are optional and usually only used on OBS server side.
 /etc/obs/services/scm-bridge/credentials
   Each line must contain a triplet with a space seperated:
 
-  PROJECT_NAMESPACE HOSTNAME USERNAME TOKEN/PASSWORD
+  PROJECT\_NAMESPACE HOSTNAME USERNAME TOKEN/PASSWORD
 
   These credentials will be used for git cloning when no other credentials
   are defined in the specified URL.
 
-  PROJECT_NAMESPACE is also valid for all sub projects. When using '*' it is
+  PROJECT\_NAMESPACE is also valid for all sub projects. When using '*' it is
   valid for all projects.
 
 
