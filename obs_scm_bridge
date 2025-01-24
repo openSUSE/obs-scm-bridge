@@ -110,7 +110,7 @@ class ObsGit(object):
             self.shallow_clone = True
             # we cannot do a shallow clone if we want the commit data
             # for a specific directory
-            if write_obsinfo_with_subdir:
+            if create_obsinfo and write_obsinfo_with_subdir:
                 self.shallow_clone = False
             self.keep_meta = False
         # if we keep the meta files we always want a deep clone
