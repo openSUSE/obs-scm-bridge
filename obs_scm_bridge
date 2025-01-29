@@ -78,28 +78,28 @@ class ObsGit(object):
         if "subdir" in query:
             self.subdir = query['subdir'][0]
             del query['subdir']
-            self.url[4] = urllib.parse.urlencode(query)
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
         if "arch" in query:
             self.arch = query['arch']
             del query['arch']
-            self.url[4] = urllib.parse.urlencode(query)
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
         if "enforce_bcntsynctag" in query:
             self.enforce_bcntsynctag = True
             del query['enforce_bcntsynctag']
-            self.url[4] = urllib.parse.urlencode(query)
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
         if "keepmeta" in query:
             self.keep_meta = True
             del query['keepmeta']
-            self.url[4] = urllib.parse.urlencode(query)
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
         if "lfs" in query:
             self.no_lfs = query["lfs"] == ["0"]
             del query["lfs"]
-            self.url[4] = urllib.parse.urlencode(query)
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
         if "onlybuild" in query:
             ob = query['onlybuild']
             self.onlybuild={ob[i]:1 for i in range(len(ob))}
             del query['onlybuild']
-            self.url[4] = urllib.parse.urlencode(query)
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.url[5]:
             self.revision = self.url[5]
             self.url[5] = ''
@@ -546,7 +546,7 @@ class ObsGit(object):
         if self.arch:
             query = urllib.parse.parse_qs(url[4]);
             query['arch'] = self.arch
-            url[4] = urllib.parse.urlencode(query)
+            url[4] = urllib.parse.urlencode(query, doseq=True)
 
         # handle relative urls in submodules
         unparsed_url = urllib.parse.urlunparse(url)
@@ -586,7 +586,7 @@ class ObsGit(object):
         url = self.url.copy()
         query = urllib.parse.parse_qs(url[4])
         query['subdir'] = subdir + name
-        url[4] = urllib.parse.urlencode(query)
+        url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.revision:
             url[5] = self.revision
 
