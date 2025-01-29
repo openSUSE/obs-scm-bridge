@@ -73,6 +73,8 @@ class ObsGit(object):
         self.processed = {}
         self.git_store = None
         self.shallow_clone = shallow_clone
+        self.create_obsinfo = create_obsinfo
+        self.add_noobsinfo = False
 
         query = urllib.parse.parse_qs(self.url[4])
         if "subdir" in query:
@@ -100,6 +102,11 @@ class ObsGit(object):
             self.onlybuild={ob[i]:1 for i in range(len(ob))}
             del query['onlybuild']
             self.url[4] = urllib.parse.urlencode(query, doseq=True)
+        if "noobsinfo" in query:
+            self.add_noobsinfo = True
+            self.create_obsinfo = False
+            del query['noobsinfo']
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.url[5]:
             self.revision = self.url[5]
             self.url[5] = ''
@@ -109,7 +116,7 @@ class ObsGit(object):
             self.shallow_clone = True
             # we cannot do a shallow clone if we want the commit data
             # for a specific directory
-            if create_obsinfo and write_obsinfo_with_subdir:
+            if self.create_obsinfo and write_obsinfo_with_subdir:
                 self.shallow_clone = False
             self.keep_meta = False
         # if we keep the meta files we always want a deep clone
@@ -284,7 +291,7 @@ class ObsGit(object):
     # the _scmsync.obsinfo file might become obsolete again when we store entire
     # git history by default later.
     def write_obsinfo(self) -> None:
-        if not create_obsinfo:
+        if not self.create_obsinfo:
             # we write it only when importing data into the source server
             return
         if not self.subdir:
@@ -547,6 +554,10 @@ class ObsGit(object):
             query = urllib.parse.parse_qs(url[4]);
             query['arch'] = self.arch
             url[4] = urllib.parse.urlencode(query, doseq=True)
+        if self.add_noobsinfo:
+            query = urllib.parse.parse_qs(url[4]);
+            query['noobsinfo'] = [ '1' ]
+            url[4] = urllib.parse.urlencode(query, doseq=True)
 
         # handle relative urls in submodules
         unparsed_url = urllib.parse.urlunparse(url)
@@ -589,6 +600,14 @@ class ObsGit(object):
         url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.revision:
             url[5] = self.revision
+        if self.arch:
+            query = urllib.parse.parse_qs(url[4]);
+            query['arch'] = self.arch
+            url[4] = urllib.parse.urlencode(query, doseq=True)
+        if self.add_noobsinfo:
+            query = urllib.parse.parse_qs(url[4]);
+            query['noobsinfo'] = 1
+            url[4] = urllib.parse.urlencode(query, doseq=True)
 
         self.write_package_xml_file(name, urllib.parse.urlunparse(url))
         self.export_files.add(name + ".xml")
