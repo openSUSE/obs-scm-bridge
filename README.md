@@ -56,13 +56,15 @@ Special directives
 Special directives can be given via cgi parameters to the bridge. Extend
 your url with
 
- * `lfs=0` to skip downloading LFS assets
+ * lfs=0 to skip downloading LFS assets
 
- * arch=ARCH CGI parameter to specify arch specific assets downloads
+ * arch=ARCH specify arch for assets downloads (can be used multiple times)
 
- * keepmeta=1 CGI parameter to include full git vcs data (.git directory)
+ * keepmeta=1 include full git vcs data (.git directory)
 
- * subdir=DIRECTORY CGI parameter to package only a subdirectory
+ * subdir=DIRECTORY package only a subdirectory
+
+ * noobsinfo=1 do not write a `_scmsync.obsinfo` file
 
 Special directives for entire projects
 ======================================
