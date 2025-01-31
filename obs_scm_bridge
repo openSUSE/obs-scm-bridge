@@ -76,7 +76,7 @@ class ObsGit(object):
         self.create_obsinfo = create_obsinfo
         self.add_noobsinfo = False
 
-        query = urllib.parse.parse_qs(self.url[4])
+        query = urllib.parse.parse_qs(self.url[4], keep_blank_values=True)
         if "subdir" in query:
             self.subdir = query['subdir'][0]
             del query['subdir']
@@ -551,11 +551,11 @@ class ObsGit(object):
         url = list(urllib.parse.urlparse(urlstr))
         url[5] = revision
         if self.arch:
-            query = urllib.parse.parse_qs(url[4]);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
             query['arch'] = self.arch
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.add_noobsinfo:
-            query = urllib.parse.parse_qs(url[4]);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
             query['noobsinfo'] = [ '1' ]
             url[4] = urllib.parse.urlencode(query, doseq=True)
 
@@ -595,17 +595,17 @@ class ObsGit(object):
 
         # add subdir parameter to url
         url = self.url.copy()
-        query = urllib.parse.parse_qs(url[4])
+        query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
         query['subdir'] = subdir + name
         url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.revision:
             url[5] = self.revision
         if self.arch:
-            query = urllib.parse.parse_qs(url[4]);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
             query['arch'] = self.arch
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.add_noobsinfo:
-            query = urllib.parse.parse_qs(url[4]);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
             query['noobsinfo'] = 1
             url[4] = urllib.parse.urlencode(query, doseq=True)
 
