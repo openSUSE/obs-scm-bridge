@@ -512,31 +512,32 @@ class ObsGit(object):
         with open(filename, 'x') as linkfile:
             linkfile.write(f"""<link package="{escape(target)}" cicount="copy" />""")
 
-    def list_submodule_revisions(self) -> None:
+    def list_submodule_revisions(self, subdir: Optional[str]='.') -> None:
         self.revisions = {}
-        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', 'HEAD', '.' ]
+        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', 'HEAD', subdir ]
         output = self.run_cmd(cmd, fatal="git ls-tree")
         for line in output.splitlines():
             lstree = line.split(maxsplit=4)
             if lstree[1] == 'commit' and len(lstree[2]) >= 40:
                 self.revisions[lstree[3]] = lstree[2]
 
-    def process_package_submodule(self, gsmsection: configparser.SectionProxy, package_name: Optional[str]=None) -> None:
-        path = gsmsection['path']
+    def process_package_submodule(self, gsmsection: configparser.SectionProxy, subdir: Optional[str]=None) -> None:
+        package_name = path = gsmsection['path']
         urlstr = gsmsection['url']
-        if not package_name:
-            package_name = path
+
+        if subdir:
+            package_name = path.removeprefix(subdir)
+            package_name = package_name.removeprefix('/')
 
         if package_name in self.processed:
             return
 
-        if '/' in path:
-            # we handle only top level submodules in project mode
+        if '/' in package_name:
+            # we handle only submodules for packages itself in project mode
             return
 
         # find revision of submodule
-        if not self.revisions:
-            self.list_submodule_revisions()
+        self.list_submodule_revisions(subdir)
         assert self.revisions, "self.revisions must not be None after calling self.list_submodule_revisions"
         revision = self.revisions.get(path, None)
         if not revision:
@@ -636,16 +637,12 @@ class ObsGit(object):
             for newsubdir in subdir_yml['subdirs']:
                 if not newsubdir:
                     continue
-                if (subdir + newsubdir + '/') in self.processed:
-                    continue
-                self.processed[subdir + newsubdir + '/'] = True
                 self.generate_package_xml_files_of_directory(subdir + newsubdir + '/')
             if 'toplevel' not in subdir_yml or subdir_yml['toplevel'] != 'include':
                 return
 
         # find all top level git submodules
-        if '.gitmodules' not in self.processed and os.path.isfile(self.clonedir + '/.gitmodules'):
-            self.processed['.gitmodules'] = True
+        if os.path.isfile(self.clonedir + '/.gitmodules'):
             gsmconfig = None
             gsmconfig = configparser.ConfigParser()
             gsmconfig.read(self.clonedir + '/.gitmodules')
@@ -658,7 +655,7 @@ class ObsGit(object):
                 if not 'url' in gsmconfig[section]:
                     logging.warn("url not defined for git submodule " + section)
                     continue
-                self.process_package_submodule(gsmconfig[section])
+                self.process_package_submodule(gsmconfig[section], subdir)
 
         # handle plain files and directories
         logging.debug("walk via %s", directory)
