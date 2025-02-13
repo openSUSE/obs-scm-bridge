@@ -67,7 +67,6 @@ class ObsGit(object):
         self.no_lfs = False
         self.enforce_bcntsynctag = False
         # for project level mode
-        self.export_files = set(["_config", "_scmsync.obsinfo"])
         self.gitsubmodules: Set[str] = set()
         self.revisions: Optional[Dict[str, str]] = None
         self.processed = {}
@@ -506,14 +505,12 @@ class ObsGit(object):
             if projectscmsync:
                 xmlfile.write(f"""<url>{escape(projectscmsync)}</url>\n""")
             xmlfile.write(f"""</package>""")
-        self.export_files.add(name + ".xml")
         filename = f"{self.outdir}/{name}.link"
         if os.path.lexists(filename):
             logging.error(f"ERROR: The {name}.link file must not be part of the git repository.")
             sys.exit(1)
         with open(filename, 'x') as linkfile:
             linkfile.write(f"""<link package="{escape(target)}" cicount="copy" />""")
-        self.export_files.add(name + ".link")
 
     def list_submodule_revisions(self) -> None:
         self.revisions = {}
@@ -579,8 +576,6 @@ class ObsGit(object):
         self.processed[package_name] = True
         self.write_package_xml_file(package_name, unparsed_url, projectscmsync)
         self.write_info_file(package_name + ".info", revision)
-        self.export_files.add(package_name + ".xml")
-        self.export_files.add(package_name + ".info")
 
     def process_package_subdirectory(self, name: str, subdir: str) -> None:
         # current directory is self.outdir
@@ -591,7 +586,6 @@ class ObsGit(object):
         # add subdir info file
         info = self.get_subdir_info(subdir + name)
         self.write_info_file(name + ".info", info)
-        self.export_files.add(name + ".info")
 
         # add subdir parameter to url
         url = self.url.copy()
@@ -610,7 +604,6 @@ class ObsGit(object):
             url[4] = urllib.parse.urlencode(query, doseq=True)
 
         self.write_package_xml_file(name, urllib.parse.urlunparse(url))
-        self.export_files.add(name + ".xml")
 
     def generate_project_files(self) -> None:
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
@@ -631,6 +624,10 @@ class ObsGit(object):
     def generate_package_xml_files_of_directory(self, subdir) -> None:
         directory = (self.clonedir + '/' + subdir).rstrip('/')
         logging.debug("check %s (subdir=%s)", directory, subdir)
+
+        if os.path.isfile(directory + '/_config'):
+            shutil.move(directory + '/_config', '.')
+            self.processed['_config'] = True
 
         if os.path.isfile(directory + '/_subdirs'):
             subdir_yml = None
@@ -695,7 +692,7 @@ class ObsGit(object):
                     continue            # already handled in _subdir loop
                 self.process_package_subdirectory(name, subdir)
                 self.processed[name] = True
-            elif name in self.export_files:
+            elif name == '_config':
                 shutil.move(fname, '.')
                 self.processed[name] = True
 
