@@ -68,7 +68,6 @@ class ObsGit(object):
         self.enforce_bcntsynctag = False
         # for project level mode
         self.gitsubmodules: Set[str] = set()
-        self.revisions: Optional[Dict[str, str]] = None
         self.processed = {}
         self.git_store = None
         self.shallow_clone = shallow_clone
