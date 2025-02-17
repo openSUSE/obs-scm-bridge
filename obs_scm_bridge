@@ -51,7 +51,7 @@ os.environ['LANG'] = "C"
 
 class ObsGit(object):
 
-    _REGEXP = re.compile(r"^[a-zA-Z0-9\.\-\_\+]*$");
+    _REGEXP = re.compile(r"^[a-zA-Z0-9\-\_\+][a-zA-Z0-9\.\-\_\+]*$");
 
     def __init__(self, outdir: str, url: str, projectscmsync: str) -> None:
         self.outdir   = outdir
@@ -67,7 +67,6 @@ class ObsGit(object):
         self.no_lfs = False
         self.enforce_bcntsynctag = False
         # for project level mode
-        self.gitsubmodules: Set[str] = set()
         self.processed = {}
         self.git_store = None
         self.shallow_clone = shallow_clone
@@ -302,7 +301,7 @@ class ObsGit(object):
             line = self.run_cmd(cmd, cwd=self.clonedir, fatal="git rev-parse")
             commit = line.rstrip()
             cmd = [ 'git', 'log', '-n1', '--date=format:%Y%m%d', '--no-show-signature', '--pretty=format:%ct' ]
-            line = self.run_cmd(cmd, cwd=self.clonedir, fatal="git rev-parse")
+            line = self.run_cmd(cmd, cwd=self.clonedir, fatal="git log")
             tstamp = line.rstrip()
         else:
             cmd = [ 'git', 'log', '-n1', '--no-show-signature', '--pretty=format:%H %ct', '--', self.subdir]
@@ -374,7 +373,7 @@ class ObsGit(object):
         self.clonedir = None
 
     def fetch_tags(self) -> None:
-        cmd = [ 'git', '-C', self.outdir, 'fetch', '--tags', 'origin', '+refs/heads/*:refs/remotes/origin/*' ]
+        cmd = [ 'git', '-C', self.clonedir, 'fetch', '--tags', 'origin', '+refs/heads/*:refs/remotes/origin/*' ]
         logging.info("fetching all tags")
         self.run_cmd(cmd, fatal="fetch --tags")
 
@@ -472,23 +471,18 @@ class ObsGit(object):
     def write_service_info(self) -> None:
         info = None
         if self.subdir:
-            #info = self.get_subdir_info(self.outdir, '')
             info = self.get_subdir_info(self.subdir)
         else:
-            cmd = [ 'git', '-C', self.clonedir, 'show', '-s', '--pretty=format:%H', 'HEAD' ]
-            info = self.run_cmd(cmd, fatal="git show -s HEAD")
+            cmd = [ 'git', '-C', self.clonedir, 'rev-parse', 'HEAD' ]
+            info = self.run_cmd(cmd, fatal="git rev-parse HEAD")
             info = info.strip()
         if info:
             self.write_info_file(os.path.join(self.outdir, "_service_info"), info)
 
     def write_package_xml_file(self, name: str, url: str, projectscmsync: str=None) -> None:
-        projecturlxml=''
         if self.onlybuild and not name in self.onlybuild.keys():
             return
         filename = f"{self.outdir}/{name}.xml"
-        if os.path.lexists(filename):
-            logging.error(f"ERROR: The {name}.xml file must not be part of the git repository.")
-            sys.exit(1)
         with open(filename, 'x') as xmlfile:
             xmlfile.write(f"""<package name="{escape(name)}">\n""")
             if self.enforce_bcntsynctag:
@@ -497,11 +491,8 @@ class ObsGit(object):
                 xmlfile.write(f"""<url>{escape(projectscmsync)}</url>\n""")
             xmlfile.write(f"""<scmsync>{escape(url)}</scmsync>\n</package>\n""")
 
-    def write_package_xml_local_link(self, target: str, name: str, projectscmsync: str=None) -> None:
+    def write_package_xml_local_link(self, name: str, target: str, projectscmsync: str=None) -> None:
         filename = f"{self.outdir}/{name}.xml"
-        if os.path.lexists(filename):
-            logging.error(f"ERROR: The {name}.xml file must not be part of the git repository.")
-            sys.exit(1)
         with open(filename, 'x') as xmlfile:
             xmlfile.write(f"""<package name="{escape(name)}">""")
             if self.enforce_bcntsynctag:
@@ -510,9 +501,6 @@ class ObsGit(object):
                 xmlfile.write(f"""<url>{escape(projectscmsync)}</url>\n""")
             xmlfile.write(f"""</package>""")
         filename = f"{self.outdir}/{name}.link"
-        if os.path.lexists(filename):
-            logging.error(f"ERROR: The {name}.link file must not be part of the git repository.")
-            sys.exit(1)
         with open(filename, 'x') as linkfile:
             linkfile.write(f"""<link package="{escape(target)}" cicount="copy" />""")
 
@@ -527,17 +515,14 @@ class ObsGit(object):
         return revisions
 
     def process_package_submodule(self, gsmsection: configparser.SectionProxy, name: str, revision: str) -> None:
+        if not self._REGEXP.match(name):
+            logging.warn("submodule name contains invalid char: %s", name)
+            return
+
         path = gsmsection['path']
         urlstr = gsmsection['url']
 
-        if name in self.processed:
-            return
-
-        if name == '' or name.startswith('.') or '/' in name:
-            return	# hey!
-
         # write xml file and register the module
-        self.gitsubmodules.add(path)
         url = list(urllib.parse.urlparse(urlstr))
         url[5] = revision
         if self.arch:
@@ -562,11 +547,10 @@ class ObsGit(object):
         projecturl = self.url.copy()
         # replace the fragment with the checked out commit id
         cmd = [ 'git', '-C', self.clonedir, 'rev-parse', 'HEAD' ]
-        line = self.run_cmd(cmd, cwd=self.outdir, fatal="git rev-parse")
+        line = self.run_cmd(cmd, fatal="git rev-parse HEAD")
         projecturl[5] = line.rstrip()
         projectscmsync = urllib.parse.urlunparse(projecturl)
 
-        self.processed[name] = True
         self.write_package_xml_file(name, unparsed_url, projectscmsync)
         self.write_info_file(name + ".info", revision)
 
@@ -597,6 +581,15 @@ class ObsGit(object):
             url[4] = urllib.parse.urlencode(query, doseq=True)
 
         self.write_package_xml_file(name, urllib.parse.urlunparse(url))
+
+    def process_package_locallink(self, name: str, target: str) -> None:
+        if not self._REGEXP.match(name):
+            logging.warn("locallink name contains invalid char: %s", name)
+            return
+        if not self._REGEXP.match(target):
+            logging.warn("locallink target contains invalid char: %s", target)
+            return
+        self.write_package_xml_local_link(name, target)
 
     def generate_project_files(self) -> None:
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
@@ -631,9 +624,11 @@ class ObsGit(object):
                 name = name.removeprefix(subdir)
             if '/' in name:
                 continue
+            if name in self.processed:
+                continue                # already handled
             if not 'url' in gsmconfig:
-                logging.warn("url not defined for git submodule " + section)
-                continue
+                logging.error("url not defined for submodule " + section)
+                sys.exit(1)
             if not revisions:
                 revisions = self.list_submodule_revisions(subdir)
             revision = revisions.get(gsmconfig['path'], None)
@@ -641,6 +636,7 @@ class ObsGit(object):
                 logging.error("Could not determine revision of submodule for " + gsmconfig['path'])
                 sys.exit(1)
             self.process_package_submodule(gsmconfig, name, revision)
+            self.processed[name] = True
 
     def generate_package_xml_files_of_directory(self, subdir) -> None:
         directory = (self.clonedir + '/' + subdir).rstrip('/')
@@ -675,33 +671,26 @@ class ObsGit(object):
             if name in self.processed:
                 continue                # already handled
             fname = directory + '/' + name
-            if os.path.islink(fname):
+            if name == '.git':
+                if self.keep_meta and subdir == '':
+                    shutil.move(fname, '.')
+                    self.processed[name] = True
+            elif os.path.islink(fname):
                 target = os.readlink(fname).rstrip('/') # this is no recursive lookup, but is there a usecase?
                 if not target or '/' in target or target.startswith('.'):
                     logging.warn("only local links are supported, skipping: " + name)
                     continue
-                if target in self.gitsubmodules or os.path.isdir(directory + '/' + target):
-                    self.write_package_xml_local_link(target, name)
-                    self.processed[name] = True
-                else:
-                    logging.debug("skipping symlink to a non git submodule %s -> %s", name, target)
-                continue
-
-            if name == '.git':
-                if self.keep_meta and subdir == '':
-                    shutil.move(fname, '.')
+                if not os.path.isdir(directory + '/' + target):
+                    logging.debug("skipping dangling symlink %s -> %s", name, target)
+                    continue
+                self.process_package_locallink(name, target)
                 self.processed[name] = True
             elif os.path.isdir(fname):
-                if name in self.gitsubmodules:
-                    continue            # already handled as git submodule
                 if name in self.processed:
                     continue
                 if (subdir + name + '/') in self.processed:
                     continue            # already handled in _subdir loop
                 self.process_package_subdirectory(name, subdir)
-                self.processed[name] = True
-            elif name == '_config':
-                shutil.move(fname, '.')
                 self.processed[name] = True
 
 if __name__ == '__main__':
