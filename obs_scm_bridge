@@ -686,8 +686,6 @@ class ObsGit(object):
                 self.process_package_locallink(name, target)
                 self.processed[name] = True
             elif os.path.isdir(fname):
-                if name in self.processed:
-                    continue
                 if (subdir + name + '/') in self.processed:
                     continue            # already handled in _subdir loop
                 self.process_package_subdirectory(name, subdir)
