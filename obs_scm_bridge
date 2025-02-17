@@ -235,7 +235,9 @@ class ObsGit(object):
         if include_submodules:
             cmd = [ 'git', '-C', outdir, 'submodule', 'init' ]
             self.run_cmd(cmd, fatal="git submodule init", env=env)
-            cmd = [ 'git', '-C', outdir, 'submodule', 'update' ]
+            cmd = [ 'git', '-C', outdir, 'submodule', 'update', '--recursive' ]
+            if self.subdir:
+                cmd += [ self.subdir ]
             self.run_cmd(cmd, fatal="git submodule update", env=env)
 
     def do_clone_commit(self, outdir: str, include_submodules: bool=False) -> None:
@@ -253,11 +255,14 @@ class ObsGit(object):
         if self.subdir:
             cmd += [ '--filter=blob:none' ]
         if include_submodules:
-            # try to select specific submodule first when a subdir is given and fall back
-            if not self.subdir or self.run_cmd_nonfatal(cmd + [ "--recurse-submodules=" + self.subdir ])[0] != 0:
-               cmd += [ '--recurse-submodules' ]
-               self.run_cmd(cmd, fatal="git fetch")
-        else:
+            cmd += [ '--recurse-submodules' ]
+        (returncode, output) = self.run_cmd_nonfatal(cmd)
+        if returncode != 0:
+            # fetch failed, maybe the server refuses to give out unadvertised commits.
+            # fall back to a a full fetch
+            cmd = [ 'git', '-C', outdir, 'fetch', 'origin' ]
+            if include_submodules:
+                cmd += [ '--recurse-submodules' ]
             self.run_cmd(cmd, fatal="git fetch")
         if self.subdir:
             self.do_set_sparse_checkout(outdir)
