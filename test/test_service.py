@@ -14,9 +14,10 @@ _AAA_BASE_URL = "https://github.com/openSUSE/aaa_base"
 _LIBECONF_URL = "https://github.com/openSUSE/libeconf"
 
 CONTAINERFILE = f"""RUN set -eux; \
-    zypper -n in python311 git-core build diff python311-PyYAML; \
+    zypper -n in python311 git-core diff python311-PyYAML; \
     . /etc/os-release && [[ ${{NAME}} = "SLES" ]] || zypper -n in git-lfs; \
-    for recom in $(rpm -q --recommends build|grep ^perl); do zypper -n in $recom; done
+    zypper -n in -f --recommends build; \
+    zypper -n clean; rm -rf /var/log/zypp*
 
 RUN git config --global user.name "SUSE Bot" && \
     git config --global user.email "noreply@suse.com" && \
@@ -31,6 +32,13 @@ RUN mkdir -p {_RPMS_DIR}ring0 && \
     git submodule add ../libeconf && git commit -m "add libeconf" && \
     cd aaa_base && git rev-parse HEAD > /src/aaa_base
 
+RUN set -euo pipefail; \
+    mkdir -p {_RPMS_DIR}proj; pushd {_RPMS_DIR}proj; \
+    git init; \
+    cp -r {_RPMS_DIR}ring0/libeconf .; rm -rf libeconf/.git; \
+    cp -r {_RPMS_DIR}ring0/aaa_base .; rm -rf aaa_base/.git; \
+    git add libeconf aaa_base; git commit -m "initial commit";
+
 COPY obs_scm_bridge /usr/bin/
 RUN sed -i 's,^#!/usr/bin/python3.*,#!/usr/bin/python3.11,' /usr/bin/obs_scm_bridge
 RUN chmod +x /usr/bin/obs_scm_bridge
@@ -40,12 +48,12 @@ TUMBLEWEED = DerivedContainer(
     base="registry.opensuse.org/opensuse/tumbleweed", containerfile=CONTAINERFILE
 )
 LEAP_LATEST = DerivedContainer(
-    base="registry.opensuse.org/opensuse/leap:15.5",
+    base="registry.opensuse.org/opensuse/leap:latest",
     containerfile=CONTAINERFILE,
 )
 
 BCI_BASE_LATEST = DerivedContainer(
-    base="registry.suse.com/bci/bci-base:15.5", containerfile=CONTAINERFILE
+    base="registry.suse.com/bci/bci-base:latest", containerfile=CONTAINERFILE
 )
 
 CONTAINER_IMAGES = [TUMBLEWEED, LEAP_LATEST, BCI_BASE_LATEST]
@@ -139,6 +147,43 @@ def test_creates_packagelist(auto_container_per_test: ContainerData):
             == auto_container_per_test.connection.file(
                 f"{dest}/{pkg_name}.info"
             ).content_string.strip()
+        )
+
+
+def test_checks_out_project_without_submodules(
+    auto_container_per_test: ContainerData,
+) -> None:
+    """Smoke test that we can clone a git repository that contains packages as
+    sub-directories but not as git submodules.
+
+    Additionally, we verify that the $pkg.xml and $pkg.info files are present
+    and their contents are sane.
+
+    """
+    dest = "/tmp/proj"
+    repo = f"file://{_RPMS_DIR}proj"
+    auto_container_per_test.connection.check_output(
+        f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} --url {repo} --projectmode 1",
+    )
+
+    for pkg_name in ("libeconf", "aaa_base"):
+        info_file = auto_container_per_test.connection.file(f"{dest}/{pkg_name}.info")
+        assert info_file.exists
+
+        xml_file = auto_container_per_test.connection.file(f"{dest}/{pkg_name}.xml")
+        assert xml_file.exists
+
+        # the xml file should have essentially only the following contents:
+        # <package name="$pkg_name">
+        # <scmsync>$clone_url?subdir=$pkg_name</scmsync>
+        # </package>
+        pkg_meta = ET.fromstring(xml_file.content_string)
+        assert pkg_meta.attrib["name"] == pkg_name
+        scm_sync = pkg_meta.findall("scmsync")
+        assert (
+            len(scm_sync) == 1
+            and scm_sync[0].text
+            and scm_sync[0].text == f"{repo}?subdir={pkg_name}"
         )
 
 

@@ -21,7 +21,7 @@ import subprocess
 import tempfile
 import yaml
 from html import escape
-from typing import Dict, List, Optional, Set, TextIO, Tuple, Union
+from typing import Dict, List, Optional, TextIO, Tuple, Union
 import urllib.parse
 import configparser
 
@@ -72,6 +72,8 @@ class ObsGit(object):
         self.shallow_clone = shallow_clone
         self.create_obsinfo = create_obsinfo
         self.add_noobsinfo = False
+        #: git submodule config, if present
+        self.gsmconfig: Optional[configparser.ConfigParser] = None
 
         query = urllib.parse.parse_qs(self.url[4], keep_blank_values=True)
         if "subdir" in query:
