@@ -14,9 +14,10 @@ _AAA_BASE_URL = "https://github.com/openSUSE/aaa_base"
 _LIBECONF_URL = "https://github.com/openSUSE/libeconf"
 
 CONTAINERFILE = f"""RUN set -eux; \
-    zypper -n in python311 git-core build diff python311-PyYAML; \
+    zypper -n in python311 git-core diff python311-PyYAML; \
     . /etc/os-release && [[ ${{NAME}} = "SLES" ]] || zypper -n in git-lfs; \
-    for recom in $(rpm -q --recommends build|grep ^perl); do zypper -n in $recom; done
+    zypper -n in -f --recommends build; \
+    zypper -n clean; rm -rf /var/log/zypp*
 
 RUN git config --global user.name "SUSE Bot" && \
     git config --global user.email "noreply@suse.com" && \
