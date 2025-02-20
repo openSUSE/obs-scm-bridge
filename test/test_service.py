@@ -40,12 +40,12 @@ TUMBLEWEED = DerivedContainer(
     base="registry.opensuse.org/opensuse/tumbleweed", containerfile=CONTAINERFILE
 )
 LEAP_LATEST = DerivedContainer(
-    base="registry.opensuse.org/opensuse/leap:15.5",
+    base="registry.opensuse.org/opensuse/leap:latest",
     containerfile=CONTAINERFILE,
 )
 
 BCI_BASE_LATEST = DerivedContainer(
-    base="registry.suse.com/bci/bci-base:15.5", containerfile=CONTAINERFILE
+    base="registry.suse.com/bci/bci-base:latest", containerfile=CONTAINERFILE
 )
 
 CONTAINER_IMAGES = [TUMBLEWEED, LEAP_LATEST, BCI_BASE_LATEST]
