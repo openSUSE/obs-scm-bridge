@@ -21,7 +21,7 @@ import subprocess
 import tempfile
 import yaml
 from html import escape
-from typing import Dict, List, Optional, Set, TextIO, Tuple, Union
+from typing import Dict, List, Optional, TextIO, Tuple, Union
 import urllib.parse
 import configparser
 
