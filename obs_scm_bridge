@@ -546,12 +546,7 @@ class ObsGit(object):
         if self.url[0][0:4] == 'git+':
             unparsed_url = 'git+' + unparsed_url
 
-        projecturl = self.url.copy()
-        # replace the fragment with the checked out commit id
-        cmd = [ 'git', '-C', self.clonedir, 'rev-parse', 'HEAD' ]
-        line = self.run_cmd(cmd, fatal="git rev-parse HEAD")
-        projecturl[5] = line.rstrip()
-        projectscmsync = urllib.parse.urlunparse(projecturl)
+        projectscmsync = urllib.parse.urlunparse(self.url)
 
         self.write_package_xml_file(name, unparsed_url, projectscmsync)
         self.write_info_file(name + ".info", revision)
