@@ -44,16 +44,23 @@ RUN sed -i 's,^#!/usr/bin/python3.*,#!/usr/bin/python3.11,' /usr/bin/obs_scm_bri
 RUN chmod +x /usr/bin/obs_scm_bridge
 """
 
+EXTRA_ENVIRONMENT_VARIABLES = {
+    'SCM_BRIDGE_TESTCASE': '1'
+}
+
 TUMBLEWEED = DerivedContainer(
-    base="registry.opensuse.org/opensuse/tumbleweed", containerfile=CONTAINERFILE
+    base="registry.opensuse.org/opensuse/tumbleweed", containerfile=CONTAINERFILE,
+    extra_environment_variables=EXTRA_ENVIRONMENT_VARIABLES
 )
 LEAP_LATEST = DerivedContainer(
     base="registry.opensuse.org/opensuse/leap:latest",
     containerfile=CONTAINERFILE,
+    extra_environment_variables=EXTRA_ENVIRONMENT_VARIABLES
 )
 
 BCI_BASE_LATEST = DerivedContainer(
-    base="registry.suse.com/bci/bci-base:latest", containerfile=CONTAINERFILE
+    base="registry.suse.com/bci/bci-base:latest", containerfile=CONTAINERFILE,
+    extra_environment_variables=EXTRA_ENVIRONMENT_VARIABLES
 )
 
 CONTAINER_IMAGES = [TUMBLEWEED, LEAP_LATEST, BCI_BASE_LATEST]

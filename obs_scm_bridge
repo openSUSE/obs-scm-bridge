@@ -35,9 +35,12 @@ shallow_clone = True
 create_obsinfo = False
 rewrite_url_to_ssh = False
 write_obsinfo_with_subdir = True
+testcase_mode = False
 
 if os.environ.get('DEBUG_SCM_BRIDGE') == "1":
     logging.getLogger().setLevel(logging.DEBUG)
+if os.environ.get('SCM_BRIDGE_TESTCASE') == "1":
+    testcase_mode = True
 if os.environ.get('OBS_SERVICE_DAEMON'):
     pack_directories = True
     get_assets = True
@@ -237,6 +240,8 @@ class ObsGit(object):
             sys.exit(1)
 
     def verify_scmurl(self, scmurl:str) -> None:
+        if testcase_mode and scmurl.startswith('file://'):
+            return
         if not(scmurl.startswith('http://') or scmurl.startswith('https://')):
             logging.error(f"ERROR: illegel scm url '{scmurl}'")
             sys.exit(1)
