@@ -145,6 +145,10 @@ class ObsGit(object):
                 scmtoolurl[0] = 'ssh'
         self.scmtoolurl = urllib.parse.urlunparse(scmtoolurl)
 
+    def die(self, msg:str):
+        logging.error(msg)
+        sys.exit(1)
+
     def add_critical_instance(
             self,
             name: str
@@ -179,8 +183,7 @@ class ObsGit(object):
                 text=f"protocol=https\nhost={entry[1]}\nusername={entry[2]}\npassword={entry[3]}\n"
                 proc.communicate(input=text)
                 if proc.returncode != 0:
-                    logging.error("Could not setup git credential store")
-                    sys.exit(1)
+                    self.die("could not setup git credential store")
 
     def run_cmd_nonfatal(
             self,
@@ -226,25 +229,23 @@ class ObsGit(object):
                     transient_error = True
             if transient_error:
                 print("TRANSIENT ERROR: " + fatal + " failed")
-            sys.exit(returncode)
+            sys.exit(1)
         return output
 
     def verify_branch(self, branch:str) -> None:
         if branch.startswith('-'):
-            logging.error(f"ERROR: illegel branch/commit '{branch}'")
+            self.die(f"illegel branch/commit '{branch}'")
             sys.exit(1)
 
     def verify_subdir(self, subdir:str) -> None:
         if subdir.startswith('-'):
-            logging.error(f"ERROR: illegel sub-directory '{subdir}'")
-            sys.exit(1)
+            self.die(f"illegel sub-directory '{subdir}'")
 
     def verify_scmurl(self, scmurl:str) -> None:
         if testcase_mode and scmurl.startswith('file://'):
             return
         if not(scmurl.startswith('http://') or scmurl.startswith('https://')):
-            logging.error(f"ERROR: illegel scm url '{scmurl}'")
-            sys.exit(1)
+            self.die(f"illegel scm url '{scmurl}'")
 
     def do_set_sparse_checkout(self, outdir: str) -> None:
         self.run_cmd([ 'git', '-C', outdir, 'sparse-checkout', 'set', self.subdir ], fatal="git sparse-checkout")
@@ -338,8 +339,7 @@ class ObsGit(object):
             commit, tstamp = line.split()
         infofile = os.path.join(self.outdir, '_scmsync.obsinfo')
         if os.path.lexists(infofile):
-            logging.error("ERROR: The _scmsync.obsinfo file must not be part of the git repository.")
-            sys.exit(1)
+            self.die("the _scmsync.obsinfo file must not be part of the git repository")
         with open(infofile, 'x') as obsinfo:
             obsinfo.write("mtime: " + tstamp + "\n")
             obsinfo.write("commit: " + commit + "\n")
@@ -355,11 +355,9 @@ class ObsGit(object):
     def check_subdir(self, subdir: str):
         fromdir = os.path.join(self.clonedir, subdir)
         if not os.path.realpath(fromdir+'/').startswith(os.path.realpath(self.clonedir+'/')):
-            print("ERROR: subdir " + subdir + " is not below clone directory")
-            sys.exit(1)
+            self.die(f"subdir {subdir} is not below clone directory")
         if not os.path.isdir(fromdir):
-            print("ERROR: subdir " + subdir + " does not exist")
-            sys.exit(1)
+            self.die(f"subdir {subdir} does not exist")
 
     def clone(self, include_submodules: bool=False, no_local_link: bool=False, write_service_info: bool=False) -> None:
         if not self.subdir:
@@ -377,12 +375,10 @@ class ObsGit(object):
         fromdir = os.path.join(clonedir, self.subdir)
         if os.path.islink(fromdir):
             if no_local_link:
-                print("ERROR: local link points to another local link: " + self.subdir)
-                sys.exit(1)
+                self.die(f"local link points to another local link: {self.subdir}")
             target = os.readlink(fromdir).rstrip('/') # this is no recursive lookup, but is there a usecase?
             if not target or '/' in target or target.startswith('.'):
-                print("ERROR: only local links are supported: " + self.subdir)
-                sys.exit(1)
+                self.die(f"only local links are supported: {self.subdir}")
             # switch subdir and clone again
             self.subdir=target
             shutil.rmtree(clonedir)
@@ -485,15 +481,13 @@ class ObsGit(object):
             lstree = line.split(maxsplit=4)
             if len(lstree[2]) >= 40:
                return lstree[2]
-        logging.error(f"ERROR: could not determine tree info of {path}")
-        sys.exit(1)
+        self.die(f"could not determine tree info of {path}")
 
     def write_info_file(self, filename: str, info: str) -> None:
         if not filename.startswith("/"):
             filename = self.outdir + "/" + filename
         if os.path.lexists(filename):
-            logging.error(f"ERROR: The {filename} file must not be part of the git repository.")
-            sys.exit(1)
+            self.die(f"the {filename} file must not be part of the git repository")
         with open(filename, 'x') as infofile:
             infofile.write(info + '\n')
 
@@ -651,14 +645,12 @@ class ObsGit(object):
             if name in self.processed:
                 continue                # already handled
             if not 'url' in gsmconfig:
-                logging.error("url not defined for submodule " + section)
-                sys.exit(1)
+                self.die(f"url not defined for submodule {section}")
             if not revisions:
                 revisions = self.list_submodule_revisions(subdir)
             revision = revisions.get(gsmconfig['path'], None)
             if not revision:
-                logging.error("Could not determine revision of submodule for " + gsmconfig['path'])
-                sys.exit(1)
+                self.die("could not determine revision of submodule for {gsmconfig['path']}")
             self.process_package_submodule(gsmconfig, name, revision)
             self.processed[name] = True
 
