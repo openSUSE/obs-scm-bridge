@@ -226,10 +226,26 @@ class ObsGit(object):
             sys.exit(returncode)
         return output
 
+    def verify_branch(self, branch:str) -> None:
+        if branch.startswith('-'):
+            logging.error(f"ERROR: illegel branch/commit '{branch}'")
+            sys.exit(1)
+
+    def verify_subdir(self, subdir:str) -> None:
+        if subdir.startswith('-'):
+            logging.error(f"ERROR: illegel sub-directory '{subdir}'")
+            sys.exit(1)
+
+    def verify_scmurl(self, scmurl:str) -> None:
+        if not(scmurl.startswith('http://') or scmurl.startswith('https://')):
+            logging.error(f"ERROR: illegel scm url '{scmurl}'")
+            sys.exit(1)
+
     def do_set_sparse_checkout(self, outdir: str) -> None:
         self.run_cmd([ 'git', '-C', outdir, 'sparse-checkout', 'set', self.subdir ], fatal="git sparse-checkout")
 
     def do_checkout(self, outdir: str, branch: str, include_submodules: bool=False) -> None:
+        self.verify_branch(branch)
         env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
         cmd = [ 'git', '-C', outdir, 'checkout', '-q', branch]
         self.run_cmd(cmd, fatal="git checkout", env=env)
@@ -238,6 +254,7 @@ class ObsGit(object):
             self.run_cmd(cmd, fatal="git submodule init", env=env)
             cmd = [ 'git', '-C', outdir, 'submodule', 'update', '--recursive' ]
             if self.subdir:
+                self.verify_subdir(self.subdir)
                 cmd += [ self.subdir ]
             self.run_cmd(cmd, fatal="git submodule update", env=env)
 
@@ -270,6 +287,11 @@ class ObsGit(object):
         self.do_checkout(outdir, self.revision, include_submodules=include_submodules)
 
     def do_clone(self, outdir: str, include_submodules: bool=False) -> None:
+        self.verify_scmurl(self.scmtoolurl)
+        if self.revision:
+            self.verify_branch(self.revision)
+        if self.subdir:
+            self.verify_subdir(self.subdir)
         if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
             self.do_clone_commit(outdir, include_submodules=include_submodules)
             return
@@ -306,7 +328,7 @@ class ObsGit(object):
             line = self.run_cmd(cmd, cwd=self.clonedir, fatal="git log")
             tstamp = line.rstrip()
         else:
-            cmd = [ 'git', 'log', '-n1', '--no-show-signature', '--pretty=format:%H %ct', '--', self.subdir]
+            cmd = [ 'git', 'log', '-n1', '--no-show-signature', '--pretty=format:%H %ct', '--end-of-options', self.subdir]
             line = self.run_cmd(cmd, cwd=self.clonedir, fatal="git log")
             commit, tstamp = line.split()
         infofile = os.path.join(self.outdir, '_scmsync.obsinfo')
@@ -452,7 +474,7 @@ class ObsGit(object):
             self.run_cmd(cmd, fatal="debian origtar export")
 
     def get_subdir_info(self, path: str) -> str:
-        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', '-d', 'HEAD', path ]
+        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', '-d', 'HEAD', '--end-of-options', path ]
         output = self.run_cmd(cmd, fatal="git ls-tree")
         for line in output.splitlines():
             lstree = line.split(maxsplit=4)
@@ -508,7 +530,7 @@ class ObsGit(object):
 
     def list_submodule_revisions(self, subdir: str) -> Dict[str, str]:
         revisions = {}
-        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', 'HEAD', (subdir if subdir else '.') ]
+        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', 'HEAD', '--end-of-options', (subdir if subdir else '.') ]
         output = self.run_cmd(cmd, fatal="git ls-tree")
         for line in output.splitlines():
             lstree = line.split(maxsplit=4)
@@ -636,6 +658,9 @@ class ObsGit(object):
             self.processed[name] = True
 
     def generate_package_xml_files_of_directory(self, subdir) -> None:
+        if subdir:
+            self.verify_subdir(subdir)
+            self.check_subdir(subdir)
         directory = (self.clonedir + '/' + subdir).rstrip('/')
         logging.debug("check %s (subdir=%s)", directory, subdir)
 
