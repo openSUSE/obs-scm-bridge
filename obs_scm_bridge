@@ -245,7 +245,7 @@ class ObsGit(object):
         if testcase_mode and scmurl.startswith('file://'):
             return
         if not(scmurl.startswith('http://') or scmurl.startswith('https://') or scmurl.startswith('ssh://')):
-            self.die(f"illegel scm url '{scmurl}'")
+            self.die(f"illegal scm url '{scmurl}'")
 
     def do_set_sparse_checkout(self, outdir: str) -> None:
         self.run_cmd([ 'git', '-C', outdir, 'sparse-checkout', 'set', self.subdir ], fatal="git sparse-checkout")
