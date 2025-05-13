@@ -234,12 +234,12 @@ class ObsGit(object):
 
     def verify_branch(self, branch:str) -> None:
         if branch.startswith('-'):
-            self.die(f"illegel branch/commit '{branch}'")
+            self.die(f"illegal branch/commit '{branch}'")
             sys.exit(1)
 
     def verify_subdir(self, subdir:str) -> None:
         if subdir.startswith('-'):
-            self.die(f"illegel sub-directory '{subdir}'")
+            self.die(f"illegal sub-directory '{subdir}'")
 
     def verify_scmurl(self, scmurl:str) -> None:
         if testcase_mode and scmurl.startswith('file://'):
