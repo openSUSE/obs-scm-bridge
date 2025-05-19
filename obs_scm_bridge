@@ -77,6 +77,8 @@ class ObsGit(object):
         self.add_noobsinfo = False
         #: git submodule config, if present
         self.gsmconfig: Optional[configparser.ConfigParser] = None
+        self.gsmpath = {}
+        self.gsmrevisions = {}
 
         query = urllib.parse.parse_qs(self.url[4], keep_blank_values=True)
         if "subdir" in query:
@@ -537,13 +539,28 @@ class ObsGit(object):
                 revisions[lstree[3]] = lstree[2]
         return revisions
 
-    def process_package_submodule(self, gsmsection: configparser.SectionProxy, name: str, revision: str) -> None:
+    def process_package_submodule(self, name: str, subdir: str) -> None:
         if not self._REGEXP.match(name):
             logging.warn("submodule name contains invalid char: %s", name)
             return
 
-        path = gsmsection['path']
+        section = self.gsmpath[subdir + name]
+        if not section:
+            logging.warn("submodule not configured for %s", subdir + name)
+            return
+        gsmsection = self.gsmconfig[section]
+
         urlstr = gsmsection['url']
+        if not urlstr:
+            self.die(f"url not defined for submodule {section}")
+
+        revisions = self.gsmrevisions.get(subdir)
+        if not revisions:
+            revisions = self.gsmrevisions[subdir] = self.list_submodule_revisions(subdir)
+
+        revision = revisions.get(gsmsection['path'])
+        if not revision:
+            self.die("could not determine revision of submodule for {gsmsection['path']}")
 
         # write xml file and register the module
         url = list(urllib.parse.urlparse(urlstr))
@@ -609,6 +626,22 @@ class ObsGit(object):
             return
         self.write_package_xml_local_link(name, target)
 
+    def parse_gsmconfig(self):
+        self.gsmconfig = configparser.ConfigParser()
+        self.gsmconfig.read(self.clonedir + '/.gitmodules')
+        gsmpath = {}
+        for section in self.gsmconfig.sections():
+            gsmconfig = self.gsmconfig[section]
+            if not 'path' in gsmconfig:
+                logging.warn("path not defined for git submodule " + section)
+                continue
+            path = gsmconfig['path']
+            if path in gsmpath:
+                logging.warn("multiple definitions of %s path in git submodule config", path)
+                continue
+            gsmpath[path] = section
+        self.gsmpath = gsmpath
+
     def generate_project_files(self) -> None:
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
         self.clonedir = clonedir
@@ -622,37 +655,46 @@ class ObsGit(object):
         os.chdir(self.outdir)
         subdir = self.subdir + '/' if self.subdir else ''
         if os.path.isfile(clonedir + '/.gitmodules'):
-            self.gsmconfig = configparser.ConfigParser()
-            self.gsmconfig.read(clonedir + '/.gitmodules')
+            self.parse_gsmconfig()
         self.generate_package_xml_files_of_directory(subdir)
         shutil.rmtree(clonedir)
         self.clonedir = None
 
-    def generate_package_xml_files_of_directory_submodules(self, subdir) -> None:
-        revisions = None
-        for section in self.gsmconfig.sections():
-            gsmconfig = self.gsmconfig[section]
-            if not 'path' in gsmconfig:
-                logging.warn("path not defined for git submodule " + section)
-                continue
-            name = gsmconfig['path']
-            if subdir:
-                if not name.startswith(subdir):
-                     continue
-                name = name.removeprefix(subdir)
-            if '/' in name:
-                continue
-            if name in self.processed:
-                continue                # already handled
-            if not 'url' in gsmconfig:
-                self.die(f"url not defined for submodule {section}")
-            if not revisions:
-                revisions = self.list_submodule_revisions(subdir)
-            revision = revisions.get(gsmconfig['path'], None)
-            if not revision:
-                self.die("could not determine revision of submodule for {gsmconfig['path']}")
-            self.process_package_submodule(gsmconfig, name, revision)
-            self.processed[name] = True
+    def read_project_manifest(self, filename):
+        packages = None
+        subdirectories = []
+        manifest_yml = None
+        with open(filename) as stream:
+            manifest_yml = yaml.safe_load(stream)
+        if 'packages' in manifest_yml:
+            packages = []
+        if manifest_yml.get('packages'):
+            for name in manifest_yml['packages']:
+                if not name or name.startswith('.') or name.startswith('/'):
+                    logging.warn("illegal packages entry '%s'", name)
+                    continue
+                if '/' in name or '*' in name: # for now
+                    logging.warn("packages entry with '/' or '*' not implemented yet")
+                    continue
+                packages.append(name)
+        if manifest_yml.get('subdirectories'):
+            for newsubdir in manifest_yml['subdirectories']:
+                if newsubdir:
+                    subdirectories.append(newsubdir)
+        return packages, subdirectories
+
+    def read_project_subdirs(self, filename):
+        packages = None
+        subdirectories = []
+        subdir_yml = None
+        with open(filename) as stream:
+            subdir_yml = yaml.safe_load(stream)
+        for newsubdir in subdir_yml['subdirs']:
+            if newsubdir:
+                subdirectories.append(newsubdir)
+        if 'toplevel' not in subdir_yml or subdir_yml['toplevel'] != 'include':
+            packages = []
+        return packages, subdirectories
 
     def generate_package_xml_files_of_directory(self, subdir) -> None:
         if subdir:
@@ -665,28 +707,27 @@ class ObsGit(object):
             shutil.move(directory + '/_config', '.')
             self.processed['_config'] = True
 
-        if os.path.isfile(directory + '/_subdirs'):
-            subdir_yml = None
-            with open(directory + '/_subdirs') as stream:
-                subdir_yml = yaml.safe_load(stream)
-            for newsubdir in subdir_yml['subdirs']:
-                if not newsubdir:
-                    continue
-                if (subdir + newsubdir + '/') in self.processed:
-                    continue
-                self.processed[subdir + newsubdir + '/'] = True
-                self.generate_package_xml_files_of_directory(subdir + newsubdir + '/')
-            if 'toplevel' not in subdir_yml or subdir_yml['toplevel'] != 'include':
-                return
+        packages = None
+        subdirectories = []
 
-        # process all submodules in this directory
-        if self.gsmconfig:
-            self.generate_package_xml_files_of_directory_submodules(subdir)
+        if os.path.isfile(directory + '/_manifest'):
+            (packages, subdirectories) = self.read_project_manifest(directory + '/_manifest')
+        elif os.path.isfile(directory + '/_subdirs'):
+            (packages, subdirectories) = self.read_project_subdirs(directory + '/_subdirs')
+
+        # handle all subdirectories
+        for newsubdir in subdirectories:
+            if (subdir + newsubdir + '/') in self.processed:
+                continue
+            self.processed[subdir + newsubdir + '/'] = True
+            self.generate_package_xml_files_of_directory(subdir + newsubdir + '/')
+
+        if packages is None:
+            logging.debug("walk via %s", directory)
+            packages = sorted(os.listdir(directory))
 
         # handle plain files and directories
-        logging.debug("walk via %s", directory)
-        listing = sorted(os.listdir(directory))
-        for name in listing:
+        for name in packages:
             if name in self.processed:
                 continue                # already handled
             fname = directory + '/' + name
@@ -697,7 +738,7 @@ class ObsGit(object):
             elif os.path.islink(fname):
                 target = os.readlink(fname).rstrip('/') # this is no recursive lookup, but is there a usecase?
                 if not target or '/' in target or target.startswith('.'):
-                    logging.warn("only local links are supported, skipping: " + name)
+                    logging.warn("only local links are supported, skipping: %s -> %s", name, target)
                     continue
                 if not os.path.isdir(directory + '/' + target):
                     logging.debug("skipping dangling symlink %s -> %s", name, target)
@@ -707,7 +748,10 @@ class ObsGit(object):
             elif os.path.isdir(fname):
                 if (subdir + name + '/') in self.processed:
                     continue            # already handled in _subdir loop
-                self.process_package_subdirectory(name, subdir)
+                if (subdir + name) in self.gsmpath:
+                    self.process_package_submodule(name, subdir)
+                else:
+                    self.process_package_subdirectory(name, subdir)
                 self.processed[name] = True
 
 if __name__ == '__main__':
