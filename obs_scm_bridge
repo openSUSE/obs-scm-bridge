@@ -62,6 +62,7 @@ class ObsGit(object):
         self.outdir   = outdir
         self.clonedir = None
         self.revision = None
+        self.trackingbranch = None
         self.subdir   = None
         self.projectscmsync = projectscmsync
         self.keep_meta = False
@@ -113,14 +114,13 @@ class ObsGit(object):
             self.create_obsinfo = False
             del query['noobsinfo']
             self.url[4] = urllib.parse.urlencode(query, doseq=True)
+        if 'trackingbranch' in query:
+            self.trackingbranch = query['trackingbranch'][0]
+            del query['trackingbranch']
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.url[5]:
             self.revision = self.url[5]
             self.url[5] = ''
-        if 'trackingbranch' in query:
-            if follow_tracking_branch:
-                self.revision = query['trackingbranch'][0]
-            del query['trackingbranch']
-            self.url[4] = urllib.parse.urlencode(query, doseq=True)
         # we cannot keep the meta in subdir mode and we can always
         # do a shallow clone
         if self.subdir:
@@ -305,28 +305,42 @@ class ObsGit(object):
         self.verify_scmurl(self.scmtoolurl)
         if self.revision:
             self.verify_branch(self.revision)
+        if self.trackingbranch:
+            self.verify_branch(self.trackingbranch)
         if self.subdir:
             self.verify_subdir(self.subdir)
+        branch = self.revision
+        reset_to_commit = None
         if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
-            self.do_clone_commit(outdir, include_submodules=include_submodules)
-            return
+            if self.trackingbranch and follow_tracking_branch:
+                branch = self.trackingbranch
+                reset_to_commit = self.revision
+            else:
+                self.do_clone_commit(outdir, include_submodules=include_submodules)
+                return
         cmd = [ 'git', 'clone', self.scmtoolurl, outdir ]
         if include_submodules:
             if self.subdir:
                cmd += [ "--recurse-submodules=" + self.subdir ]
             else:
                cmd += [ '--recurse-submodules' ]
-        if self.shallow_clone:
+        if self.shallow_clone and not reset_to_commit:
             cmd += [ '--depth', '1' ]
         if self.subdir:
-            cmd += [ '--filter=blob:none', '--no-checkout' ]
-        if self.revision:
+            cmd += [ '--filter=blob:none' ]
+        if self.subdir or reset_to_commit:
+            cmd += [ '--no-checkout' ]
+        if branch:
             cmd.insert(2, '-b')
-            cmd.insert(3, self.revision)
+            cmd.insert(3, branch)
         env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
         self.run_cmd(cmd, fatal="git clone", env=env)
+        if reset_to_commit:
+            cmd = [ 'git', '-C', outdir, 'reset', '--soft', reset_to_commit ]
+            self.run_cmd(cmd, fatal="git reset", env=env)
         if self.subdir:
             self.do_set_sparse_checkout(outdir)
+        if self.subdir or reset_to_commit:
             self.do_checkout(outdir, 'HEAD', include_submodules=include_submodules)
 
     # the _scmsync.obsinfo file might become obsolete again when we store entire
