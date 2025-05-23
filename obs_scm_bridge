@@ -312,7 +312,7 @@ class ObsGit(object):
         branch = self.revision
         reset_to_commit = None
         if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
-            if self.trackingbranch and follow_tracking_branch:
+            if follow_tracking_branch:
                 branch = self.trackingbranch
                 reset_to_commit = self.revision
             else:
