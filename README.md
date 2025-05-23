@@ -66,6 +66,9 @@ your url with
 
  * noobsinfo=1 do not write a `_scmsync.obsinfo` file
 
+ * trackingbranch=BRANCH may be used to clone the branch instead of a revision.
+                         information is taken from .gitmodules if available.
+
 Special directives for entire projects
 ======================================
 
