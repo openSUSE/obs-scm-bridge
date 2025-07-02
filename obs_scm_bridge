@@ -365,11 +365,15 @@ class ObsGit(object):
             self.die("the _scmsync.obsinfo file must not be part of the git repository")
         with open(infofile, 'x') as obsinfo:
             obsinfo.write("mtime: " + tstamp + "\n")
+            # commit is the resulting commit hash
             obsinfo.write("commit: " + commit + "\n")
             if self.scmtoolurl:
                 obsinfo.write("url: " + self.scmtoolurl + "\n")
             if self.revision:
+                # revision can be the required commit, tag or branch requested.
                 obsinfo.write("revision: " + self.revision + "\n")
+            if self.trackingbranch:
+                obsinfo.write("trackingbranch: " + self.trackingbranch + "\n")
             if self.subdir:
                 obsinfo.write("subdir: " + self.subdir + "\n")
             if self.projectscmsync:
