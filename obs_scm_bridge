@@ -420,6 +420,8 @@ class ObsGit(object):
         if write_service_info:
             self.write_service_info()
         for name in os.listdir(fromdir):
+            if name == '_scmsync.obsinfo' or name == '_service_info':
+                self.die(f"the {name} file must not be part of the git repository")
             shutil.move(os.path.join(fromdir, name), self.outdir)
         shutil.rmtree(clonedir)
         self.clonedir = None
