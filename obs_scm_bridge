@@ -82,6 +82,7 @@ class ObsGit(object):
         self.gsmconfig: Optional[configparser.ConfigParser] = None
         self.gsmpath = {}
         self.gsmrevisions = {}
+        self.asset_types_filter = [] # all by default
 
         query = urllib.parse.parse_qs(self.url[4], keep_blank_values=True)
         if "subdir" in query:
@@ -117,6 +118,11 @@ class ObsGit(object):
         if 'trackingbranch' in query:
             self.trackingbranch = query['trackingbranch'][0]
             del query['trackingbranch']
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
+        if "buildtype" in query:
+            t = query['buildtype']
+            self.asset_types_filter=[t[i] for i in range(len(t))]
+            del query['buildtype']
             self.url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.url[5]:
             self.revision = self.url[5]
@@ -301,6 +307,12 @@ class ObsGit(object):
             self.do_set_sparse_checkout(outdir)
         self.do_checkout(outdir, self.revision, include_submodules=include_submodules)
 
+
+    def is_type_enabled(self, asset_type: str):
+        if not self.asset_types_filter:
+            return True
+        return asset_type in self.asset_types_filter
+
     def do_clone(self, outdir: str, include_submodules: bool=False) -> None:
         self.verify_scmurl(self.scmtoolurl)
         if self.revision:
@@ -477,6 +489,8 @@ class ObsGit(object):
         cmd = [ download_assets ]
         for arch in self.arch:
             cmd += [ '--arch', arch ]
+        for asset_type in self.asset_types_filter:
+            cmd += [ '--type', asset_type ]
         if pack_directories:
             cmd += [ '--noassetdir', '--', self.outdir ]
         else:
@@ -600,6 +614,10 @@ class ObsGit(object):
             query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
             query['arch'] = self.arch
             url[4] = urllib.parse.urlencode(query, doseq=True)
+        if self.asset_types_filter:
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query['buildtype'] = self.asset_types_filter
+            url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.add_noobsinfo:
             query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
             query['noobsinfo'] = [ '1' ]
@@ -640,6 +658,10 @@ class ObsGit(object):
         if self.arch:
             query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
             query['arch'] = self.arch
+            url[4] = urllib.parse.urlencode(query, doseq=True)
+        if self.asset_types_filter:
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query['buildtype'] = self.asset_types_filter
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.add_noobsinfo:
             query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
@@ -834,8 +856,10 @@ if __name__ == '__main__':
 
     if get_assets:
         obsgit.get_assets()
-        obsgit.get_debian_origtar()
+        if obsgit.is_type_enabled('dsc'):
+            obsgit.get_debian_origtar()
     if pack_directories:
-        obsgit.export_debian_files()
+        if obsgit.is_type_enabled('dsc'):
+            obsgit.export_debian_files()
         obsgit.cpio_directories()
 
