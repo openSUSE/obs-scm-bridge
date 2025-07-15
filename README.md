@@ -69,6 +69,10 @@ your url with
  * trackingbranch=BRANCH may be used to clone the branch instead of a revision.
                          information is taken from .gitmodules if available.
 
+ * buildtype=TYPE may be used to limit asset types, the default is to download all.
+                  Possible values are spec, dsc, fedpkg or golang.
+                  (Parameter can be used multiple times)
+
 Special directives for entire projects
 ======================================
 
