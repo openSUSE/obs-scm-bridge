@@ -684,7 +684,13 @@ class ObsGit(object):
 
     def parse_gsmconfig(self):
         self.gsmconfig = configparser.ConfigParser()
-        self.gsmconfig.read(self.clonedir + '/.gitmodules')
+
+        # the parser stumbles over a mix of space and tabs. So, let's strip
+        # leading whitespaces first
+        gitmodules = f.read(self.clonedir + '/.gitmodules')
+        content = "\n".join([line.lstrip() for line in gitmodules.split("\n")])
+
+        self.gsmconfig.read_string(content)
         gsmpath = {}
         for section in self.gsmconfig.sections():
             gsmconfig = self.gsmconfig[section]
