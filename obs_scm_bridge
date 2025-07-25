@@ -282,6 +282,9 @@ class ObsGit(object):
     def do_clone_commit(self, outdir: str, include_submodules: bool=False) -> None:
         assert self.revision, "no revision is set but do_clone_commit was called"
         objectformat='--object-format=sha1'
+        # we don't check for trailing zeros here on purpose. This blocks the usage
+        # of SHA1 package git in a SHA256 git project. If this is needed, we may
+        # implement a switch for that.
         if len(self.revision) == 64:
             objectformat='--object-format=sha256'
         cmd = [ 'git', 'init', objectformat, outdir ]
@@ -681,7 +684,13 @@ class ObsGit(object):
 
     def parse_gsmconfig(self):
         self.gsmconfig = configparser.ConfigParser()
-        self.gsmconfig.read(self.clonedir + '/.gitmodules')
+
+        # the parser stumbles over a mix of space and tabs. So, let's strip
+        # leading whitespaces first
+        gitmodules = f.read(self.clonedir + '/.gitmodules')
+        content = "\n".join([line.lstrip() for line in gitmodules.split("\n")])
+
+        self.gsmconfig.read_string(content)
         gsmpath = {}
         for section in self.gsmconfig.sections():
             gsmconfig = self.gsmconfig[section]
