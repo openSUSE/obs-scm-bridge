@@ -179,8 +179,8 @@ class ObsGit(object):
         self.run_cmd(cmd, fatal="git config credential.helper")
 
         with open(cred_file, "r", encoding="utf-8") as cred:
-            for l in cred.readlines():
-                line = l.rstrip()
+            for line in cred.readlines():
+                line = line.rstrip()
                 entry = line.split(' ')
                 if len(entry) != 4:
                     continue
