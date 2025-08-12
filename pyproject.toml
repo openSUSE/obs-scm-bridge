@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "obs-scm-bridge"
-version = "0.2.1"
+version = "0.7.4"
 description = "A helper service to work with git repositories in OBS"
 authors = ["Adrian Schröter <adrian@suse.de>", "Michael Schroeder <mls@suse.de>"]
 license = "GPL-2.0-or-later"
