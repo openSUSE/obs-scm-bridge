@@ -585,7 +585,7 @@ class ObsGit(object):
                 xmlfile.write(f"""<bcntsynctag>{escape(name)}</bcntsynctag>""")
             if projectscmsync:
                 xmlfile.write(f"""<url>{escape(projectscmsync)}</url>\n""")
-            xmlfile.write(f"""</package>""")
+            xmlfile.write("""</package>""")
         filename = f"{self.outdir}/{name}.link"
         with open(filename, 'x') as linkfile:
             linkfile.write(f"""<link package="{escape(target)}" cicount="copy" />""")
