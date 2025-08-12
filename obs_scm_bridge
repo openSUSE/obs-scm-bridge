@@ -56,7 +56,7 @@ os.environ['LANG'] = "C"
 
 class ObsGit(object):
 
-    _REGEXP = re.compile(r"^[a-zA-Z0-9\-\_\+][a-zA-Z0-9\.\-\_\+]*$");
+    _REGEXP = re.compile(r"^[a-zA-Z0-9\-\_\+][a-zA-Z0-9\.\-\_\+]*$")
 
     def __init__(self, outdir: str, url: str, projectscmsync: str) -> None:
         self.outdir   = outdir
@@ -627,19 +627,19 @@ class ObsGit(object):
         url = list(urllib.parse.urlparse(urlstr))
         url[5] = revision
         if 'branch' in gsmsection:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['trackingbranch'] = [gsmsection['branch']]
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.arch:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['arch'] = self.arch
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.asset_types_filter:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['buildtype'] = self.asset_types_filter
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.add_noobsinfo:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['noobsinfo'] = [ '1' ]
             url[4] = urllib.parse.urlencode(query, doseq=True)
 
@@ -676,15 +676,15 @@ class ObsGit(object):
         if self.revision:
             url[5] = self.revision
         if self.arch:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['arch'] = self.arch
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.asset_types_filter:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['buildtype'] = self.asset_types_filter
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.add_noobsinfo:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['noobsinfo'] = 1
             url[4] = urllib.parse.urlencode(query, doseq=True)
 
