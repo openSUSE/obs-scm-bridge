@@ -346,9 +346,9 @@ class ObsGit(object):
         cmd = [ 'git', 'clone', self.scmtoolurl, outdir ]
         if include_submodules:
             if self.subdir:
-               cmd += [ "--recurse-submodules=" + self.subdir ]
+                cmd += [ "--recurse-submodules=" + self.subdir ]
             else:
-               cmd += [ '--recurse-submodules' ]
+                cmd += [ '--recurse-submodules' ]
             # git submodule cloning may fail if we shallow clone
             # do_shallow_clone = False
         if do_shallow_clone:
@@ -543,7 +543,7 @@ class ObsGit(object):
         for line in output.splitlines():
             lstree = line.split(maxsplit=4)
             if len(lstree[2]) >= 40:
-               return lstree[2]
+                return lstree[2]
         self.die(f"could not determine tree info of {path}")
 
     def write_info_file(self, filename: str, info: str) -> None:
@@ -870,9 +870,9 @@ if __name__ == '__main__':
     obsgit = ObsGit(outdir, url, projectscmsync)
     obsgit.add_critical_instance("src.opensuse.org")
     if os.path.isfile(critical_instances_config):
-       with open(critical_instances_config) as conf:
-           for line in conf.readlines():
-               obsgit.add_critical_instance(line.rstrip())
+        with open(critical_instances_config) as conf:
+            for line in conf.readlines():
+                obsgit.add_critical_instance(line.rstrip())
     if os.path.isfile(credentials_config):
         obsgit.setup_credentials(credentials_config)
 
