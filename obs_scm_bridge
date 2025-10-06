@@ -475,6 +475,11 @@ class ObsGit(object):
             if os.path.islink(name):
                 specials.append(name)
                 continue
+            # FIXME: better way would be to store all permission flags git stores
+            #        and re-apply them without moving them.
+            if os.path.isfile(name) and os.access(name, os.X_OK):
+                specials.append(name)
+                continue
             if os.path.isdir(name):
                 logging.info("CPIO %s ", name)
                 self.cpio_directory(name)
