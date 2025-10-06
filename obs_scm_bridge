@@ -291,8 +291,9 @@ class ObsGit(object):
             # Detect SHA type of the server
             # We need to do this to support different type of SHA-256 submodule in a SHA-1 git repo
             cmd = [ 'git', 'ls-remote', self.scmtoolurl, 'HEAD' ]
-            line = self.run_cmd(cmd, fatal="git ls-remote")
-            if len(line.rstrip()) == 69: # SHA-256 plus \t plus HEAD
+            output = self.run_cmd(cmd, fatal="git ls-remote")
+            lastline = output.splitlines()[-1]
+            if len(lastline.rstrip()) == 69: # SHA-256 plus \t plus HEAD
                 objectformat='--object-format=sha256'
         cmd = [ 'git', 'init', objectformat, outdir ]
         self.run_cmd(cmd, fatal="git init")
