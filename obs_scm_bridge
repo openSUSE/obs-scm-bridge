@@ -574,6 +574,8 @@ class ObsGit(object):
             xmlfile.write(f"""<scmsync>{escape(url)}</scmsync>\n</package>\n""")
 
     def write_package_xml_local_link(self, name: str, target: str, projectscmsync: str=None) -> None:
+        if self.onlybuild and not name in self.onlybuild.keys():
+            return
         filename = f"{self.outdir}/{name}.xml"
         with open(filename, 'x') as xmlfile:
             xmlfile.write(f"""<package name="{escape(name)}">""")
