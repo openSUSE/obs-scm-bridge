@@ -347,7 +347,8 @@ class ObsGit(object):
                cmd += [ "--recurse-submodules=" + self.subdir ]
             else:
                cmd += [ '--recurse-submodules' ]
-        if self.shallow_clone and not reset_to_commit:
+        elif self.shallow_clone and not reset_to_commit:
+            # git submodule cloning may fail with depth 1
             cmd += [ '--depth', '1' ]
         if self.subdir:
             cmd += [ '--filter=blob:none' ]
