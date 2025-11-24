@@ -350,7 +350,7 @@ class ObsGit(object):
             else:
                cmd += [ '--recurse-submodules' ]
             # git submodule cloning may fail if we shallow clone
-            do_shallow_clone = False
+            # do_shallow_clone = False
         if do_shallow_clone:
             cmd += [ '--depth', '1' ]
         if self.subdir:
