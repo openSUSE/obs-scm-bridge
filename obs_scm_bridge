@@ -334,10 +334,12 @@ class ObsGit(object):
             self.verify_subdir(self.subdir)
         branch = self.revision
         reset_to_commit = None
+        do_shallow_clone = self.shallow_clone
         if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
             if follow_tracking_branch:
                 branch = self.trackingbranch
                 reset_to_commit = self.revision
+                do_shallow_clone = False
             else:
                 self.do_clone_commit(outdir, include_submodules=include_submodules)
                 return
@@ -347,8 +349,9 @@ class ObsGit(object):
                cmd += [ "--recurse-submodules=" + self.subdir ]
             else:
                cmd += [ '--recurse-submodules' ]
-        elif self.shallow_clone and not reset_to_commit:
-            # git submodule cloning may fail with depth 1
+            # git submodule cloning may fail if we shallow clone
+            do_shallow_clone = False
+        if do_shallow_clone:
             cmd += [ '--depth', '1' ]
         if self.subdir:
             cmd += [ '--filter=blob:none' ]
