@@ -56,7 +56,7 @@ os.environ['LANG'] = "C"
 
 class ObsGit(object):
 
-    _REGEXP = re.compile(r"^[a-zA-Z0-9\-\_\+][a-zA-Z0-9\.\-\_\+]*$");
+    _REGEXP = re.compile(r"^[a-zA-Z0-9\-\_\+][a-zA-Z0-9\.\-\_\+]*$")
 
     def __init__(self, outdir: str, url: str, projectscmsync: str) -> None:
         self.outdir   = outdir
@@ -179,8 +179,8 @@ class ObsGit(object):
         self.run_cmd(cmd, fatal="git config credential.helper")
 
         with open(cred_file, "r", encoding="utf-8") as cred:
-            for l in cred.readlines():
-                line = l.rstrip()
+            for line in cred.readlines():
+                line = line.rstrip()
                 entry = line.split(' ')
                 if len(entry) != 4:
                     continue
@@ -346,9 +346,9 @@ class ObsGit(object):
         cmd = [ 'git', 'clone', self.scmtoolurl, outdir ]
         if include_submodules:
             if self.subdir:
-               cmd += [ "--recurse-submodules=" + self.subdir ]
+                cmd += [ "--recurse-submodules=" + self.subdir ]
             else:
-               cmd += [ '--recurse-submodules' ]
+                cmd += [ '--recurse-submodules' ]
             # git submodule cloning may fail if we shallow clone
             # do_shallow_clone = False
         if do_shallow_clone:
@@ -543,7 +543,7 @@ class ObsGit(object):
         for line in output.splitlines():
             lstree = line.split(maxsplit=4)
             if len(lstree[2]) >= 40:
-               return lstree[2]
+                return lstree[2]
         self.die(f"could not determine tree info of {path}")
 
     def write_info_file(self, filename: str, info: str) -> None:
@@ -566,7 +566,7 @@ class ObsGit(object):
             self.write_info_file(os.path.join(self.outdir, "_service_info"), info)
 
     def write_package_xml_file(self, name: str, url: str, projectscmsync: str=None) -> None:
-        if self.onlybuild and not name in self.onlybuild.keys():
+        if self.onlybuild and name not in self.onlybuild.keys():
             return
         filename = f"{self.outdir}/{name}.xml"
         with open(filename, 'x') as xmlfile:
@@ -585,7 +585,7 @@ class ObsGit(object):
                 xmlfile.write(f"""<bcntsynctag>{escape(name)}</bcntsynctag>""")
             if projectscmsync:
                 xmlfile.write(f"""<url>{escape(projectscmsync)}</url>\n""")
-            xmlfile.write(f"""</package>""")
+            xmlfile.write("""</package>""")
         filename = f"{self.outdir}/{name}.link"
         with open(filename, 'x') as linkfile:
             linkfile.write(f"""<link package="{escape(target)}" cicount="copy" />""")
@@ -627,19 +627,19 @@ class ObsGit(object):
         url = list(urllib.parse.urlparse(urlstr))
         url[5] = revision
         if 'branch' in gsmsection:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['trackingbranch'] = [gsmsection['branch']]
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.arch:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['arch'] = self.arch
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.asset_types_filter:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['buildtype'] = self.asset_types_filter
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.add_noobsinfo:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['noobsinfo'] = [ '1' ]
             url[4] = urllib.parse.urlencode(query, doseq=True)
 
@@ -676,15 +676,15 @@ class ObsGit(object):
         if self.revision:
             url[5] = self.revision
         if self.arch:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['arch'] = self.arch
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.asset_types_filter:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['buildtype'] = self.asset_types_filter
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.add_noobsinfo:
-            query = urllib.parse.parse_qs(url[4], keep_blank_values=True);
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
             query['noobsinfo'] = 1
             url[4] = urllib.parse.urlencode(query, doseq=True)
 
@@ -713,7 +713,7 @@ class ObsGit(object):
         gsmpath = {}
         for section in self.gsmconfig.sections():
             gsmconfig = self.gsmconfig[section]
-            if not 'path' in gsmconfig:
+            if 'path' not in gsmconfig:
                 logging.warn("path not defined for git submodule " + section)
                 continue
             path = gsmconfig['path']
@@ -870,9 +870,9 @@ if __name__ == '__main__':
     obsgit = ObsGit(outdir, url, projectscmsync)
     obsgit.add_critical_instance("src.opensuse.org")
     if os.path.isfile(critical_instances_config):
-       with open(critical_instances_config) as conf:
-           for line in conf.readlines():
-               obsgit.add_critical_instance(line.rstrip())
+        with open(critical_instances_config) as conf:
+            for line in conf.readlines():
+                obsgit.add_critical_instance(line.rstrip())
     if os.path.isfile(credentials_config):
         obsgit.setup_credentials(credentials_config)
 
