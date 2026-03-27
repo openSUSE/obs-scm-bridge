@@ -491,7 +491,9 @@ class ObsGit(object):
             #        and re-apply them without moving them.
             if os.path.isfile(name) and os.access(name, os.X_OK):
                 specials.append(name)
-                continue
+                # we package it twice as eg. executable spec files need still be available
+                # for the source server
+                ### continue
             if os.path.isdir(name):
                 logging.info("CPIO %s ", name)
                 self.cpio_directory(name)
