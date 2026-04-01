@@ -1,4 +1,225 @@
 #!/usr/bin/python3
+import logging
+import os
+import re
+import yaml
+import configparser
+from typing import Dict, List, Optional, Tuple
+
+
+def read_project_manifest(filename: str) -> Tuple[Optional[List[str]], List[str]]:
+    packages = None
+    subdirectories = []
+    manifest_yml = None
+    with open(filename) as stream:
+        manifest_yml = yaml.safe_load(stream)
+    if 'packages' in manifest_yml:
+        packages = []
+    if manifest_yml.get('packages'):
+        for name in manifest_yml['packages']:
+            if not name or name.startswith('.') or name.startswith('/'):
+                logging.warn("illegal packages entry '%s'", name)
+                continue
+            if '/' in name or '*' in name:
+                logging.warn("packages entry with '/' or '*' not implemented yet")
+                continue
+            packages.append(name)
+    if manifest_yml.get('subdirectories'):
+        for newsubdir in manifest_yml['subdirectories']:
+            if newsubdir:
+                subdirectories.append(newsubdir)
+    return packages, subdirectories
+
+### Legacy, don't use this anymore
+def read_project_subdirs(filename: str) -> Tuple[Optional[List[str]], List[str]]:
+    packages = None
+    subdirectories = []
+    subdir_yml = None
+    with open(filename) as stream:
+        subdir_yml = yaml.safe_load(stream)
+    for newsubdir in subdir_yml['subdirs']:
+        if newsubdir:
+            subdirectories.append(newsubdir)
+    if 'toplevel' not in subdir_yml or subdir_yml['toplevel'] != 'include':
+        packages = []
+    return packages, subdirectories
+
+
+_REGEXP = re.compile(r"^[a-zA-Z0-9\-\_\+][a-zA-Z0-9\.\-\_\+]*$")
+
+
+def _read_gitmodules(directory: str) -> Dict[str, Tuple[str, str]]:
+    submodule_paths = {}
+    gitmodules_path = os.path.join(directory, '.gitmodules')
+    if not os.path.isfile(gitmodules_path):
+        return submodule_paths
+    
+    gsmconfig = configparser.ConfigParser()
+    gitmodules = None
+    with open(gitmodules_path) as f:
+        gitmodules = f.read()
+    gitmodules = "\n".join([line.lstrip() for line in gitmodules.split("\n")])
+    gsmconfig.read_string(gitmodules)
+    for section in gsmconfig.sections():
+        gsm = gsmconfig[section]
+        if 'path' in gsm:
+            submodule_paths[gsm['path']] = (section, gsm.get('url', ''))
+    return submodule_paths
+
+
+def list_packages(directory: str) -> List[Tuple[str, str, Optional[str]]]:
+    results = []
+    seen = set()
+
+    if not os.path.isdir(directory):
+        return results
+
+    submodule_paths = _read_gitmodules(directory)
+
+    if os.path.isfile(directory + '/_manifest'):
+        (_packages, _subdirs) = read_project_manifest(directory + '/_manifest')
+        if _packages:
+            for pkg in _packages:
+                if not pkg or pkg.startswith('.'):
+                    logging.warn("illegal packages entry '%s'", pkg)
+                    continue
+                if pkg in seen:
+                    logging.debug("duplicate package entry '%s'", pkg)
+                    continue
+                seen.add(pkg)
+                if '/' in pkg:
+                    subdir = pkg
+                    pkg_name = pkg.rsplit('/', 1)[-1]
+                    results.append((pkg_name, subdir, None))
+                else:
+                    results.append((pkg, pkg, None))
+        if _subdirs:
+            for subdir in _subdirs:
+                if not subdir:
+                    continue
+                if subdir in seen:
+                    logging.debug("duplicate subdirectory entry '%s'", subdir)
+                    continue
+                seen.add(subdir)
+
+                subdir_path = os.path.join(directory, subdir)
+                if os.path.isdir(subdir_path):
+                    for entry in os.listdir(subdir_path):
+                        entry_path = os.path.join(subdir_path, entry)
+                        if not os.path.isdir(entry_path):
+                            continue
+                        if not _REGEXP.match(entry):
+                            continue
+                        if entry in seen:
+                            logging.debug("duplicate package entry '%s'", entry)
+                            continue
+                        seen.add(entry)
+                        full_subdir = subdir + '/' + entry
+                        submod_info = submodule_paths.get(full_subdir)
+                        submod_url = submod_info[1] if submod_info else None
+                        results.append((entry, full_subdir, submod_url))
+                else:
+                    submod_info = submodule_paths.get(subdir)
+                    submod_url = submod_info[1] if submod_info else None
+                    results.append((subdir, subdir, submod_url))
+        return results
+
+    ### legacy, might get dropped
+    if os.path.isfile(directory + '/_subdirs'):
+        (_packages, _subdirs) = read_project_subdirs(directory + '/_subdirs')
+        if _packages:
+            for pkg in _packages:
+                if not pkg or pkg.startswith('.'):
+                    logging.warn("illegal packages entry '%s'", pkg)
+                    continue
+                if pkg in seen:
+                    logging.debug("duplicate package entry '%s'", pkg)
+                    continue
+                seen.add(pkg)
+                if '/' in pkg:
+                    subdir = pkg
+                    pkg_name = pkg.rsplit('/', 1)[-1]
+                    results.append((pkg_name, subdir, None))
+                else:
+                    results.append((pkg, pkg, None))
+        if _subdirs:
+            for subdir in _subdirs:
+                if not subdir:
+                    continue
+                if subdir in seen:
+                    logging.debug("duplicate subdirectory entry '%s'", subdir)
+                    continue
+                seen.add(subdir)
+
+                subdir_path = os.path.join(directory, subdir)
+                if os.path.isdir(subdir_path):
+                    for entry in os.listdir(subdir_path):
+                        entry_path = os.path.join(subdir_path, entry)
+                        if not os.path.isdir(entry_path):
+                            continue
+                        if not _REGEXP.match(entry):
+                            continue
+                        if entry in seen:
+                            logging.debug("duplicate package entry '%s'", entry)
+                            continue
+                        seen.add(entry)
+                        full_subdir = subdir + '/' + entry
+                        submod_info = submodule_paths.get(full_subdir)
+                        submod_url = submod_info[1] if submod_info else None
+                        results.append((entry, full_subdir, submod_url))
+                else:
+                    submod_info = submodule_paths.get(subdir)
+                    submod_url = submod_info[1] if submod_info else None
+                    results.append((subdir, subdir, submod_url))
+        return results
+
+    package_names = []
+    subdirectory_names = []
+    for entry in os.listdir(directory):
+        if entry.startswith('.') or entry.startswith('/'):
+            continue
+        if not _REGEXP.match(entry):
+            continue
+        full_path = os.path.join(directory, entry)
+        if os.path.isdir(full_path):
+            subdirectory_names.append(entry)
+        elif os.path.isfile(full_path):
+            package_names.append(entry)
+
+    for pkg in package_names:
+        if pkg in seen:
+            logging.debug("duplicate package entry '%s'", pkg)
+            continue
+        seen.add(pkg)
+        results.append((pkg, pkg, None))
+    for subdir in subdirectory_names:
+        if subdir in seen:
+            logging.debug("duplicate subdirectory entry '%s'", subdir)
+            continue
+        seen.add(subdir)
+        submod_info = submodule_paths.get(subdir)
+        submod_url = submod_info[1] if submod_info else None
+        results.append((subdir, subdir, submod_url))
+
+    for submod_path in submodule_paths.keys():
+        if submod_path in seen:
+            logging.debug("duplicate submodule entry '%s'", submod_path)
+            continue
+        seen.add(submod_path)
+        submod_info = submodule_paths.get(submod_path)
+        submod_url = submod_info[1] if submod_info else None
+        results.append((submod_path, submod_path, submod_url))
+
+    validated_results = []
+    for pkg, subdir, submod in results:
+        if not pkg and not subdir:
+            logging.warn("entry has empty package_name and git_subdirectory")
+            continue
+        validated_results.append((pkg, subdir, submod))
+
+    return validated_results
+
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
 # scm (only git atm) cloning and packaging for Open Build Service
@@ -19,11 +240,12 @@ import sys
 import logging
 import subprocess
 import tempfile
-import yaml
 from html import escape
 from typing import Dict, List, Optional, TextIO, Tuple, Union
 import urllib.parse
 import configparser
+
+from obs_scm_bridge.manifest import read_project_manifest, read_project_subdirs
 
 download_assets = '/usr/lib/build/download_assets'
 critical_instances_config = "/etc/obs/services/scm-bridge/critical-instances"
@@ -72,17 +294,15 @@ class ObsGit(object):
         self.url = list(urllib.parse.urlparse(url))
         self.no_lfs = False
         self.enforce_bcntsynctag = False
-        # for project level mode
         self.processed = {}
         self.git_store = None
         self.shallow_clone = shallow_clone
         self.create_obsinfo = create_obsinfo
         self.add_noobsinfo = False
-        #: git submodule config, if present
         self.gsmconfig: Optional[configparser.ConfigParser] = None
         self.gsmpath = {}
         self.gsmrevisions = {}
-        self.asset_types_filter = [] # all by default
+        self.asset_types_filter = []
 
         query = urllib.parse.parse_qs(self.url[4], keep_blank_values=True)
         if "subdir" in query:
@@ -127,30 +347,16 @@ class ObsGit(object):
         if self.url[5]:
             self.revision = self.url[5]
             self.url[5] = ''
-        # we cannot keep the meta in subdir mode and we can always
-        # do a shallow clone
         if self.subdir:
             self.shallow_clone = True
-            # we cannot do a shallow clone if we want the commit data
-            # for a specific directory
             if self.create_obsinfo and write_obsinfo_with_subdir:
                 self.shallow_clone = False
             self.keep_meta = False
-        # if we keep the meta files we always want a deep clone
         if self.keep_meta:
             self.shallow_clone = False
-        # scmtoolurl is the url we pass to the the scm tool
         scmtoolurl = self.url.copy()
         if scmtoolurl[0] and scmtoolurl[0][0:4] == 'git+':
             scmtoolurl[0] = scmtoolurl[0][4:]
-        # we want to switch to ssh as the user is likely providing his
-        # access via ssh pub key already.
-        # Unfortunality there is no generic way to rewrite the url as
-        # it depends on the installation.
-        # For now we hard code our instances, but this needs to become
-        # configurable or we need to detect it by asking the server
-        # somehow.
-        # Expect this to be moved to a config file
         if rewrite_url_to_ssh and scmtoolurl[0] == 'https':
             if scmtoolurl[1] == 'src.suse.de':
                 scmtoolurl[1] = 'gitea@src.suse.de'
@@ -164,16 +370,10 @@ class ObsGit(object):
         logging.error(msg)
         sys.exit(1)
 
-    def add_critical_instance(
-            self,
-            name: str
-    ) -> None:
+    def add_critical_instance(self, name: str) -> None:
         self.critical_git_servers.append(name)
 
-    def setup_credentials(
-            self,
-            cred_file: str
-    ) -> None:
+    def setup_credentials(self, cred_file: str) -> None:
         self.git_store = tempfile.mkstemp(prefix="obs-scm-bridge-git-cred-store", text=True)
         cmd = [ 'git', 'config', '--global', 'credential.helper', f"store --file {self.git_store[1]}" ]
         self.run_cmd(cmd, fatal="git config credential.helper")
@@ -190,49 +390,25 @@ class ObsGit(object):
                     continue
 
                 cmd = [ 'git', 'credential-store', '--file', self.git_store[1], 'store' ]
-                proc = subprocess.Popen(cmd,
-                                        shell=False,
-                                        encoding="utf-8",
-                                        stdin=subprocess.PIPE)
-                # hostname username token/password
+                proc = subprocess.Popen(cmd, shell=False, encoding="utf-8", stdin=subprocess.PIPE)
                 text=f"protocol=https\nhost={entry[1]}\nusername={entry[2]}\npassword={entry[3]}\n"
                 proc.communicate(input=text)
                 if proc.returncode != 0:
                     self.die("could not setup git credential store")
 
-    def run_cmd_nonfatal(
-            self,
-            cmd: List[str],
-            *,
-            cwd: Optional[str]=None,
-            stdout: Union[int, TextIO]=subprocess.PIPE,
-            env: Optional[Dict[str, str]]=None,
-    ) -> Tuple[int, str]:
+    def run_cmd_nonfatal(self, cmd: List[str], *, cwd: Optional[str]=None, stdout: Union[int, TextIO]=subprocess.PIPE, env: Optional[Dict[str, str]]=None) -> Tuple[int, str]:
         logging.debug("COMMAND: %s" % cmd)
         stderr = subprocess.PIPE
         if stdout == subprocess.PIPE:
             stderr = subprocess.STDOUT
-        proc = subprocess.Popen(cmd,
-                                shell=False,
-                                stdout=stdout,
-                                stderr=stderr,
-                                cwd=cwd,
-                                env=env)
+        proc = subprocess.Popen(cmd, shell=False, stdout=stdout, stderr=stderr, cwd=cwd, env=env)
         std_out = proc.communicate()[0]
         output = std_out.decode() if std_out else ''
 
         logging.debug("RESULT(%d): %s", proc.returncode, repr(output))
         return (proc.returncode, output)
 
-    def run_cmd(
-            self,
-            cmd: List[str],
-            *,
-            fatal: str,
-            cwd: Optional[str]=None,
-            stdout: Union[int, TextIO]=subprocess.PIPE,
-            env: Optional[Dict[str, str]]=None,
-    ) -> str:
+    def run_cmd(self, cmd: List[str], *, fatal: str, cwd: Optional[str]=None, stdout: Union[int, TextIO]=subprocess.PIPE, env: Optional[Dict[str, str]]=None) -> str:
         returncode, output = self.run_cmd_nonfatal(cmd, cwd=cwd, stdout=stdout, env=env)
         if returncode != 0:
             print("ERROR: " + fatal + " failed: ", output)
@@ -282,18 +458,13 @@ class ObsGit(object):
     def do_clone_commit(self, outdir: str, include_submodules: bool=False) -> None:
         assert self.revision, "no revision is set but do_clone_commit was called"
         objectformat='--object-format=sha1'
-        # we don't check for trailing zeros here on purpose. This blocks the usage
-        # of SHA1 package git in a SHA256 git project. If this is needed, we may
-        # implement a switch for that.
         if len(self.revision) == 64:
             objectformat='--object-format=sha256'
         else:
-            # Detect SHA type of the server
-            # We need to do this to support different type of SHA-256 submodule in a SHA-1 git repo
             cmd = [ 'git', 'ls-remote', self.scmtoolurl, 'HEAD' ]
             output = self.run_cmd(cmd, fatal="git ls-remote")
             lastline = output.splitlines()[-1]
-            if len(lastline.rstrip()) == 69: # SHA-256 plus \t plus HEAD
+            if len(lastline.rstrip()) == 69:
                 objectformat='--object-format=sha256'
         cmd = [ 'git', 'init', objectformat, outdir ]
         self.run_cmd(cmd, fatal="git init")
@@ -308,8 +479,6 @@ class ObsGit(object):
             cmd += [ '--recurse-submodules' ]
         (returncode, output) = self.run_cmd_nonfatal(cmd)
         if returncode != 0:
-            # fetch failed, maybe the server refuses to give out unadvertised commits.
-            # fall back to a a full fetch
             cmd = [ 'git', '-C', outdir, 'fetch', 'origin' ]
             if include_submodules:
                 cmd += [ '--recurse-submodules' ]
@@ -317,7 +486,6 @@ class ObsGit(object):
         if self.subdir:
             self.do_set_sparse_checkout(outdir)
         self.do_checkout(outdir, self.revision, include_submodules=include_submodules)
-
 
     def is_type_enabled(self, asset_type: str):
         if not self.asset_types_filter:
@@ -349,8 +517,6 @@ class ObsGit(object):
                 cmd += [ "--recurse-submodules=" + self.subdir ]
             else:
                 cmd += [ '--recurse-submodules' ]
-            # git submodule cloning may fail if we shallow clone
-            # do_shallow_clone = False
         if do_shallow_clone:
             cmd += [ '--depth', '1' ]
         if self.subdir:
@@ -370,11 +536,8 @@ class ObsGit(object):
         if self.subdir or reset_to_commit:
             self.do_checkout(outdir, 'HEAD', include_submodules=include_submodules)
 
-    # the _scmsync.obsinfo file might become obsolete again when we store entire
-    # git history by default later.
     def write_obsinfo(self) -> None:
         if not self.create_obsinfo:
-            # we write it only when importing data into the source server
             return
         if not self.subdir:
             cmd = [ 'git', 'rev-parse', 'HEAD' ]
@@ -392,12 +555,10 @@ class ObsGit(object):
             self.die("the _scmsync.obsinfo file must not be part of the git repository")
         with open(infofile, 'x') as obsinfo:
             obsinfo.write("mtime: " + tstamp + "\n")
-            # commit is the resulting commit hash
             obsinfo.write("commit: " + commit + "\n")
             if self.scmtoolurl:
                 obsinfo.write("url: " + self.scmtoolurl + "\n")
             if self.revision:
-                # revision can be the required commit, tag or branch requested.
                 obsinfo.write("revision: " + self.revision + "\n")
             if self.trackingbranch:
                 obsinfo.write("trackingbranch: " + self.trackingbranch + "\n")
@@ -430,10 +591,9 @@ class ObsGit(object):
         if os.path.islink(fromdir):
             if no_local_link:
                 self.die(f"local link points to another local link: {self.subdir}")
-            target = os.readlink(fromdir).rstrip('/') # this is no recursive lookup, but is there a usecase?
+            target = os.readlink(fromdir).rstrip('/')
             if not target or '/' in target or target.startswith('.'):
                 self.die(f"only local links are supported: {self.subdir}")
-            # switch subdir and clone again
             self.subdir=target
             shutil.rmtree(clonedir)
             self.clonedir = None
@@ -479,7 +639,6 @@ class ObsGit(object):
         specials = []
         for name in listing:
             if name in ('.git', '.gitattributes') and not self.keep_meta:
-                # we do not store git meta data by default to avoid bloat storage
                 continue
             if name[0:1] == '.':
                 specials.append(name)
@@ -487,13 +646,8 @@ class ObsGit(object):
             if os.path.islink(name):
                 specials.append(name)
                 continue
-            # FIXME: better way would be to store all permission flags git stores
-            #        and re-apply them without moving them.
             if os.path.isfile(name) and os.access(name, os.X_OK):
                 specials.append(name)
-                # we package it twice as eg. executable spec files need still be available
-                # for the source server
-                ### continue
             if os.path.isdir(name):
                 logging.info("CPIO %s ", name)
                 self.cpio_directory(name)
@@ -532,7 +686,6 @@ class ObsGit(object):
 
     def get_debian_origtar(self) -> None:
         if os.path.isfile(self.outdir + "/debian/control"):
-            # need up get all tags 
             if not self.subdir:
                 self.fetch_tags()
             cmd = [ export_debian_orig_from_git, self.outdir ]
@@ -627,7 +780,6 @@ class ObsGit(object):
         if not revision:
             self.die(f"could not determine revision of submodule for {gsmsection['path']}")
 
-        # write xml file and register the module
         url = list(urllib.parse.urlparse(urlstr))
         url[5] = revision
         if 'branch' in gsmsection:
@@ -647,12 +799,8 @@ class ObsGit(object):
             query['noobsinfo'] = [ '1' ]
             url[4] = urllib.parse.urlencode(query, doseq=True)
 
-        # handle relative urls in submodules
         unparsed_url = urllib.parse.urlunparse(url)
         if ".." == unparsed_url[0:2]:
-            # need to append a '/' to the base url so that the relative
-            # path is properly resolved, otherwise we might descend one
-            # directory too far
             unparsed_url = urllib.parse.urljoin(self.scmtoolurl+'/', unparsed_url)
         if self.url[0][0:4] == 'git+':
             unparsed_url = 'git+' + unparsed_url
@@ -663,16 +811,13 @@ class ObsGit(object):
         self.write_info_file(name + ".info", revision)
 
     def process_package_subdirectory(self, name: str, subdir: str) -> None:
-        # current directory is self.outdir
         if not self._REGEXP.match(name):
             logging.warn("directory name contains invalid char: %s", name)
             return
 
-        # add subdir info file
         info = self.get_subdir_info(subdir + name)
         self.write_info_file(name + ".info", info)
 
-        # add subdir parameter to url
         url = self.url.copy()
         query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
         query['subdir'] = subdir + name
@@ -706,8 +851,6 @@ class ObsGit(object):
     def parse_gsmconfig(self):
         self.gsmconfig = configparser.ConfigParser()
 
-        # the parser stumbles over a mix of space and tabs. So, let's strip
-        # leading whitespaces first
         gitmodules = None
         with open(self.clonedir + '/.gitmodules') as f:
             gitmodules = f.read()
@@ -745,42 +888,6 @@ class ObsGit(object):
         shutil.rmtree(clonedir)
         self.clonedir = None
 
-    def read_project_manifest(self, filename):
-        packages = None
-        subdirectories = []
-        manifest_yml = None
-        with open(filename) as stream:
-            manifest_yml = yaml.safe_load(stream)
-        if 'packages' in manifest_yml:
-            packages = []
-        if manifest_yml.get('packages'):
-            for name in manifest_yml['packages']:
-                if not name or name.startswith('.') or name.startswith('/'):
-                    logging.warn("illegal packages entry '%s'", name)
-                    continue
-                if '/' in name or '*' in name: # for now
-                    logging.warn("packages entry with '/' or '*' not implemented yet")
-                    continue
-                packages.append(name)
-        if manifest_yml.get('subdirectories'):
-            for newsubdir in manifest_yml['subdirectories']:
-                if newsubdir:
-                    subdirectories.append(newsubdir)
-        return packages, subdirectories
-
-    def read_project_subdirs(self, filename):
-        packages = None
-        subdirectories = []
-        subdir_yml = None
-        with open(filename) as stream:
-            subdir_yml = yaml.safe_load(stream)
-        for newsubdir in subdir_yml['subdirs']:
-            if newsubdir:
-                subdirectories.append(newsubdir)
-        if 'toplevel' not in subdir_yml or subdir_yml['toplevel'] != 'include':
-            packages = []
-        return packages, subdirectories
-
     def generate_package_xml_files_of_directory(self, subdir) -> None:
         if subdir:
             self.verify_subdir(subdir)
@@ -796,11 +903,10 @@ class ObsGit(object):
         subdirectories = []
 
         if os.path.isfile(directory + '/_manifest'):
-            (packages, subdirectories) = self.read_project_manifest(directory + '/_manifest')
+            (packages, subdirectories) = read_project_manifest(directory + '/_manifest')
         elif os.path.isfile(directory + '/_subdirs'):
-            (packages, subdirectories) = self.read_project_subdirs(directory + '/_subdirs')
+            (packages, subdirectories) = read_project_subdirs(directory + '/_subdirs')
 
-        # handle all subdirectories
         for newsubdir in subdirectories:
             if (subdir + newsubdir + '/') in self.processed:
                 continue
@@ -811,17 +917,16 @@ class ObsGit(object):
             logging.debug("walk via %s", directory)
             packages = sorted(os.listdir(directory))
 
-        # handle plain files and directories
         for name in packages:
             if name in self.processed:
-                continue                # already handled
+                continue
             fname = directory + '/' + name
             if name == '.git':
                 if self.keep_meta and subdir == '':
                     shutil.move(fname, '.')
                     self.processed[name] = True
             elif os.path.islink(fname):
-                target = os.readlink(fname).rstrip('/') # this is no recursive lookup, but is there a usecase?
+                target = os.readlink(fname).rstrip('/')
                 if not target or '/' in target or target.startswith('.'):
                     logging.warn("only local links are supported, skipping: %s -> %s", name, target)
                     continue
@@ -832,7 +937,7 @@ class ObsGit(object):
                 self.processed[name] = True
             elif os.path.isdir(fname):
                 if (subdir + name + '/') in self.processed:
-                    continue            # already handled in _subdir loop
+                    continue
                 if (subdir + name) in self.gsmpath:
                     self.process_package_submodule(name, subdir)
                 else:
@@ -870,7 +975,6 @@ if __name__ == '__main__':
         logging.getLogger().setLevel(logging.DEBUG)
         logging.debug("Running in debug mode")
 
-    # workflow
     obsgit = ObsGit(outdir, url, projectscmsync)
     obsgit.add_critical_instance("src.opensuse.org")
     if os.path.isfile(critical_instances_config):
@@ -894,4 +998,3 @@ if __name__ == '__main__':
         if obsgit.is_type_enabled('dsc'):
             obsgit.export_debian_files()
         obsgit.cpio_directories()
-

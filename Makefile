@@ -1,21 +1,20 @@
 prefix = /usr
-PYTHON ?= python
+PYTHON ?= python3
 
 servicedir = ${prefix}/lib/obs/service
 
-all:
+all: build
 
-install:
-	install -d $(DESTDIR)$(servicedir)
-	install -m 0755 obs_scm_bridge $(DESTDIR)$(servicedir)
-
-test:
-	flake8 set_version tests/
-	${PYTHON} -m unittest discover tests/
+build:
+	echo '#!/usr/bin/python3' > obs_scm_bridge.py
+	cat obs_scm_bridge/manifest.py >> obs_scm_bridge.py
+	echo '' >> obs_scm_bridge.py
+	cat obs_scm_bridge/__main__.py >> obs_scm_bridge.py
+	chmod +x obs_scm_bridge.py
 
 clean:
 	find -name "*.pyc" -exec rm {} \;
 	find -name '*.pyo' -exec rm {} \;
-	rm -rf set_versionc
+	rm -f obs_scm_bridge.py
 
-.PHONY: all install test
+.PHONY: all build clean

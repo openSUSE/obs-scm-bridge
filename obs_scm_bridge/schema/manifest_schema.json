@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OBS Project Manifest",
+  "description": "Schema for _manifest file in OBS project repositories",
+  "type": "object",
+  "properties": {
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9\\-_\\+][a-zA-Z0-9.\\-_\\+]*$"
+      },
+      "description": "List of directories to be used as build package"
+    },
+    "subdirectories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9\\-_\\+][a-zA-Z0-9.\\-_\\+]*$"
+      },
+      "description": "List of subdirectory paths where each subdirectory inside is considered to be a build package"
+    }
+  },
+  "additionalProperties": false
+}
