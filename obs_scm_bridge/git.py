@@ -1,0 +1,712 @@
+import logging
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from html import escape
+from typing import Dict, List, Optional, TextIO, Tuple, Union
+import urllib.parse
+import configparser
+
+from obs_scm_bridge.manifest import read_project_manifest, read_project_subdirs
+
+
+download_assets = '/usr/lib/build/download_assets'
+critical_instances_config = "/etc/obs/services/scm-bridge/critical-instances"
+credentials_config = "/etc/obs/services/scm-bridge/credentials"
+export_debian_orig_from_git = '/usr/lib/build/export_debian_orig_from_git'
+pack_directories = False
+follow_tracking_branch = False
+get_assets = False
+shallow_clone = True
+create_obsinfo = False
+rewrite_url_to_ssh = False
+write_obsinfo_with_subdir = True
+testcase_mode = False
+
+if os.environ.get('DEBUG_SCM_BRIDGE') == "1":
+    logging.getLogger().setLevel(logging.DEBUG)
+if os.environ.get('SCM_BRIDGE_TESTCASE') == "1":
+    testcase_mode = True
+if os.environ.get('OBS_SERVICE_DAEMON'):
+    pack_directories = True
+    get_assets = True
+    create_obsinfo = True
+if os.environ.get('OSC_VERSION'):
+    get_assets = True
+    shallow_clone = False
+    create_obsinfo = False
+    rewrite_url_to_ssh = True
+    follow_tracking_branch = True
+os.environ['LANG'] = "C"
+
+
+class ObsGit(object):
+
+    _REGEXP = re.compile(r"^[a-zA-Z0-9\-\_\+][a-zA-Z0-9\.\-\_\+]*$")
+
+    def __init__(self, outdir: str, url: str, projectscmsync: str) -> None:
+        self.outdir   = outdir
+        self.clonedir = None
+        self.revision = None
+        self.trackingbranch = None
+        self.subdir   = None
+        self.projectscmsync = projectscmsync
+        self.keep_meta = False
+        self.arch = []
+        self.critical_git_servers = []
+        self.onlybuild = None
+        self.url = list(urllib.parse.urlparse(url))
+        self.no_lfs = False
+        self.enforce_bcntsynctag = False
+        self.processed = {}
+        self.git_store = None
+        self.shallow_clone = shallow_clone
+        self.create_obsinfo = create_obsinfo
+        self.add_noobsinfo = False
+        self.gsmconfig: Optional[configparser.ConfigParser] = None
+        self.gsmpath = {}
+        self.gsmrevisions = {}
+        self.asset_types_filter = []
+
+        query = urllib.parse.parse_qs(self.url[4], keep_blank_values=True)
+        if "subdir" in query:
+            self.subdir = query['subdir'][0]
+            del query['subdir']
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
+        if "arch" in query:
+            self.arch = query['arch']
+            del query['arch']
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
+        if "enforce_bcntsynctag" in query:
+            self.enforce_bcntsynctag = True
+            del query['enforce_bcntsynctag']
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
+        if "keepmeta" in query:
+            self.keep_meta = True
+            del query['keepmeta']
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
+        if "lfs" in query:
+            self.no_lfs = query["lfs"] == ["0"]
+            del query["lfs"]
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
+        if "onlybuild" in query:
+            ob = query['onlybuild']
+            self.onlybuild={ob[i]:1 for i in range(len(ob))}
+            del query['onlybuild']
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
+        if "noobsinfo" in query:
+            self.add_noobsinfo = True
+            self.create_obsinfo = False
+            del query['noobsinfo']
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
+        if 'trackingbranch' in query:
+            self.trackingbranch = query['trackingbranch'][0]
+            del query['trackingbranch']
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
+        if "buildtype" in query:
+            t = query['buildtype']
+            self.asset_types_filter=[t[i] for i in range(len(t))]
+            del query['buildtype']
+            self.url[4] = urllib.parse.urlencode(query, doseq=True)
+        if self.url[5]:
+            self.revision = self.url[5]
+            self.url[5] = ''
+        if self.subdir:
+            self.shallow_clone = True
+            if self.create_obsinfo and write_obsinfo_with_subdir:
+                self.shallow_clone = False
+            self.keep_meta = False
+        if self.keep_meta:
+            self.shallow_clone = False
+        scmtoolurl = self.url.copy()
+        if scmtoolurl[0] and scmtoolurl[0][0:4] == 'git+':
+            scmtoolurl[0] = scmtoolurl[0][4:]
+        if rewrite_url_to_ssh and scmtoolurl[0] == 'https':
+            if scmtoolurl[1] == 'src.suse.de':
+                scmtoolurl[1] = 'gitea@src.suse.de'
+                scmtoolurl[0] = 'ssh'
+            elif scmtoolurl[1] == 'src.opensuse.org':
+                scmtoolurl[1] = 'gitea@src.opensuse.org'
+                scmtoolurl[0] = 'ssh'
+        self.scmtoolurl = urllib.parse.urlunparse(scmtoolurl)
+
+    def die(self, msg:str):
+        logging.error(msg)
+        sys.exit(1)
+
+    def add_critical_instance(self, name: str) -> None:
+        self.critical_git_servers.append(name)
+
+    def setup_credentials(self, cred_file: str) -> None:
+        self.git_store = tempfile.mkstemp(prefix="obs-scm-bridge-git-cred-store", text=True)
+        cmd = [ 'git', 'config', '--global', 'credential.helper', f"store --file {self.git_store[1]}" ]
+        self.run_cmd(cmd, fatal="git config credential.helper")
+
+        with open(cred_file, "r", encoding="utf-8") as cred:
+            for line in cred.readlines():
+                line = line.rstrip()
+                entry = line.split(' ')
+                if len(entry) != 4:
+                    continue
+
+                project = str(os.getenv('OBS_SERVICE_PROJECT'))
+                if entry[0] != '*' and not project.startswith(entry[0]):
+                    continue
+
+                cmd = [ 'git', 'credential-store', '--file', self.git_store[1], 'store' ]
+                proc = subprocess.Popen(cmd, shell=False, encoding="utf-8", stdin=subprocess.PIPE)
+                text=f"protocol=https\nhost={entry[1]}\nusername={entry[2]}\npassword={entry[3]}\n"
+                proc.communicate(input=text)
+                if proc.returncode != 0:
+                    self.die("could not setup git credential store")
+
+    def run_cmd_nonfatal(self, cmd: List[str], *, cwd: Optional[str]=None, stdout: Union[int, TextIO]=subprocess.PIPE, env: Optional[Dict[str, str]]=None) -> Tuple[int, str]:
+        logging.debug("COMMAND: %s" % cmd)
+        stderr = subprocess.PIPE
+        if stdout == subprocess.PIPE:
+            stderr = subprocess.STDOUT
+        proc = subprocess.Popen(cmd, shell=False, stdout=stdout, stderr=stderr, cwd=cwd, env=env)
+        std_out = proc.communicate()[0]
+        output = std_out.decode() if std_out else ''
+
+        logging.debug("RESULT(%d): %s", proc.returncode, repr(output))
+        return (proc.returncode, output)
+
+    def run_cmd(self, cmd: List[str], *, fatal: str, cwd: Optional[str]=None, stdout: Union[int, TextIO]=subprocess.PIPE, env: Optional[Dict[str, str]]=None) -> str:
+        returncode, output = self.run_cmd_nonfatal(cmd, cwd=cwd, stdout=stdout, env=env)
+        if returncode != 0:
+            print("ERROR: " + fatal + " failed: ", output)
+            transient_error = False
+            for name in self.critical_git_servers:
+                if output.find("Failed to connect to " + name) >= 0:
+                    transient_error = True
+                if output.find("unable to access") >= 0 and output.find(name) >= 0:
+                    transient_error = True
+            if transient_error:
+                print("TRANSIENT ERROR: " + fatal + " failed")
+            sys.exit(1)
+        return output
+
+    def verify_branch(self, branch:str) -> None:
+        if branch.startswith('-'):
+            self.die(f"illegal branch/commit '{branch}'")
+            sys.exit(1)
+
+    def verify_subdir(self, subdir:str) -> None:
+        if subdir.startswith('-'):
+            self.die(f"illegal sub-directory '{subdir}'")
+
+    def verify_scmurl(self, scmurl:str) -> None:
+        if testcase_mode and scmurl.startswith('file://'):
+            return
+        if not(scmurl.startswith('http://') or scmurl.startswith('https://') or scmurl.startswith('ssh://')):
+            self.die(f"illegal scm url '{scmurl}'")
+
+    def do_set_sparse_checkout(self, outdir: str) -> None:
+        self.run_cmd([ 'git', '-C', outdir, 'sparse-checkout', 'set', self.subdir ], fatal="git sparse-checkout")
+
+    def do_checkout(self, outdir: str, branch: str, include_submodules: bool=False) -> None:
+        self.verify_branch(branch)
+        env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
+        cmd = [ 'git', '-C', outdir, 'checkout', '-q', branch]
+        self.run_cmd(cmd, fatal="git checkout", env=env)
+        if include_submodules:
+            cmd = [ 'git', '-C', outdir, 'submodule', 'init' ]
+            self.run_cmd(cmd, fatal="git submodule init", env=env)
+            cmd = [ 'git', '-C', outdir, 'submodule', 'update', '--recursive' ]
+            if self.subdir:
+                self.verify_subdir(self.subdir)
+                cmd += [ self.subdir ]
+            self.run_cmd(cmd, fatal="git submodule update", env=env)
+
+    def do_clone_commit(self, outdir: str, include_submodules: bool=False) -> None:
+        assert self.revision, "no revision is set but do_clone_commit was called"
+        objectformat='--object-format=sha1'
+        if len(self.revision) == 64:
+            objectformat='--object-format=sha256'
+        else:
+            cmd = [ 'git', 'ls-remote', self.scmtoolurl, 'HEAD' ]
+            output = self.run_cmd(cmd, fatal="git ls-remote")
+            lastline = output.splitlines()[-1]
+            if len(lastline.rstrip()) == 69:
+                objectformat='--object-format=sha256'
+        cmd = [ 'git', 'init', objectformat, outdir ]
+        self.run_cmd(cmd, fatal="git init")
+        cmd = [ 'git', '-C', outdir, 'remote', 'add', 'origin', self.scmtoolurl ]
+        self.run_cmd(cmd, fatal="git remote add origin")
+        cmd = [ 'git', '-C', outdir, 'fetch', 'origin', self.revision ]
+        if self.shallow_clone:
+            cmd += [ '--depth', '1' ]
+        if self.subdir:
+            cmd += [ '--filter=blob:none' ]
+        if include_submodules:
+            cmd += [ '--recurse-submodules' ]
+        (returncode, output) = self.run_cmd_nonfatal(cmd)
+        if returncode != 0:
+            cmd = [ 'git', '-C', outdir, 'fetch', 'origin' ]
+            if include_submodules:
+                cmd += [ '--recurse-submodules' ]
+            self.run_cmd(cmd, fatal="git fetch")
+        if self.subdir:
+            self.do_set_sparse_checkout(outdir)
+        self.do_checkout(outdir, self.revision, include_submodules=include_submodules)
+
+    def is_type_enabled(self, asset_type: str):
+        if not self.asset_types_filter:
+            return True
+        return asset_type in self.asset_types_filter
+
+    def do_clone(self, outdir: str, include_submodules: bool=False) -> None:
+        self.verify_scmurl(self.scmtoolurl)
+        if self.revision:
+            self.verify_branch(self.revision)
+        if self.trackingbranch:
+            self.verify_branch(self.trackingbranch)
+        if self.subdir:
+            self.verify_subdir(self.subdir)
+        branch = self.revision
+        reset_to_commit = None
+        do_shallow_clone = self.shallow_clone
+        if self.revision and re.match(r"^[0-9a-fA-F]{40,}$", self.revision):
+            if follow_tracking_branch:
+                branch = self.trackingbranch
+                reset_to_commit = self.revision
+                do_shallow_clone = False
+            else:
+                self.do_clone_commit(outdir, include_submodules=include_submodules)
+                return
+        cmd = [ 'git', 'clone', self.scmtoolurl, outdir ]
+        if include_submodules:
+            if self.subdir:
+                cmd += [ "--recurse-submodules=" + self.subdir ]
+            else:
+                cmd += [ '--recurse-submodules' ]
+        if do_shallow_clone:
+            cmd += [ '--depth', '1' ]
+        if self.subdir:
+            cmd += [ '--filter=blob:none' ]
+        if self.subdir or reset_to_commit:
+            cmd += [ '--no-checkout' ]
+        if branch:
+            cmd.insert(2, '-b')
+            cmd.insert(3, branch)
+        env = {"GIT_LFS_SKIP_SMUDGE": "1", **os.environ} if self.no_lfs else None
+        self.run_cmd(cmd, fatal="git clone", env=env)
+        if reset_to_commit:
+            cmd = [ 'git', '-C', outdir, 'reset', '--soft', reset_to_commit ]
+            self.run_cmd(cmd, fatal="git reset", env=env)
+        if self.subdir:
+            self.do_set_sparse_checkout(outdir)
+        if self.subdir or reset_to_commit:
+            self.do_checkout(outdir, 'HEAD', include_submodules=include_submodules)
+
+    def write_obsinfo(self) -> None:
+        if not self.create_obsinfo:
+            return
+        if not self.subdir:
+            cmd = [ 'git', 'rev-parse', 'HEAD' ]
+            line = self.run_cmd(cmd, cwd=self.clonedir, fatal="git rev-parse")
+            commit = line.rstrip()
+            cmd = [ 'git', 'log', '-n1', '--date=format:%Y%m%d', '--no-show-signature', '--pretty=format:%ct' ]
+            line = self.run_cmd(cmd, cwd=self.clonedir, fatal="git log")
+            tstamp = line.rstrip()
+        else:
+            cmd = [ 'git', 'log', '-n1', '--no-show-signature', '--pretty=format:%H %ct', '--end-of-options', self.subdir]
+            line = self.run_cmd(cmd, cwd=self.clonedir, fatal="git log")
+            commit, tstamp = line.split()
+        infofile = os.path.join(self.outdir, '_scmsync.obsinfo')
+        if os.path.lexists(infofile):
+            self.die("the _scmsync.obsinfo file must not be part of the git repository")
+        with open(infofile, 'x') as obsinfo:
+            obsinfo.write("mtime: " + tstamp + "\n")
+            obsinfo.write("commit: " + commit + "\n")
+            if self.scmtoolurl:
+                obsinfo.write("url: " + self.scmtoolurl + "\n")
+            if self.revision:
+                obsinfo.write("revision: " + self.revision + "\n")
+            if self.trackingbranch:
+                obsinfo.write("trackingbranch: " + self.trackingbranch + "\n")
+            if self.subdir:
+                obsinfo.write("subdir: " + self.subdir + "\n")
+            if self.projectscmsync:
+                obsinfo.write("projectscmsync: " + self.projectscmsync + "\n")
+
+    def check_subdir(self, subdir: str):
+        fromdir = os.path.join(self.clonedir, subdir)
+        if not os.path.realpath(fromdir+'/').startswith(os.path.realpath(self.clonedir+'/')):
+            self.die(f"subdir {subdir} is not below clone directory")
+        if not os.path.isdir(fromdir):
+            self.die(f"subdir {subdir} does not exist")
+
+    def clone(self, include_submodules: bool=False, no_local_link: bool=False, write_service_info: bool=False) -> None:
+        if not self.subdir:
+            self.clonedir = self.outdir
+            self.do_clone(self.outdir, include_submodules=include_submodules)
+            self.write_obsinfo()
+            if write_service_info:
+                self.write_service_info()
+            return
+        clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
+        self.clonedir = clonedir
+        self.do_clone(clonedir, include_submodules=include_submodules)
+        self.check_subdir(self.subdir)
+
+        fromdir = os.path.join(clonedir, self.subdir)
+        if os.path.islink(fromdir):
+            if no_local_link:
+                self.die(f"local link points to another local link: {self.subdir}")
+            target = os.readlink(fromdir).rstrip('/')
+            if not target or '/' in target or target.startswith('.'):
+                self.die(f"only local links are supported: {self.subdir}")
+            self.subdir=target
+            shutil.rmtree(clonedir)
+            self.clonedir = None
+            self.clone(include_submodules=include_submodules, no_local_link=True, write_service_info=write_service_info)
+            return
+
+        if not os.path.isdir(self.outdir):
+            os.makedirs(self.outdir)
+        if write_obsinfo_with_subdir:
+            self.write_obsinfo()
+        if write_service_info:
+            self.write_service_info()
+        for name in os.listdir(fromdir):
+            if name == '_scmsync.obsinfo' or name == '_service_info':
+                self.die(f"the {name} file must not be part of the git repository")
+            shutil.move(os.path.join(fromdir, name), self.outdir)
+        shutil.rmtree(clonedir)
+        self.clonedir = None
+
+    def fetch_tags(self) -> None:
+        cmd = [ 'git', '-C', self.clonedir, 'fetch', '--tags', 'origin', '+refs/heads/*:refs/remotes/origin/*' ]
+        logging.info("fetching all tags")
+        self.run_cmd(cmd, fatal="fetch --tags")
+
+    def cpio_directory(self, directory: str) -> None:
+        logging.info("create archivefile for %s", directory)
+        cmd = [ download_assets, '--create-cpio', '--', directory ]
+        with open(directory + '.obscpio', 'x') as archivefile:
+            self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
+
+    def cpio_specials(self, specials: List[str]) -> None:
+        if not specials:
+            return
+        logging.info("create archivefile for specials")
+        cmd = [ download_assets, '--create-cpio', '--', '.' ] + specials
+        with open('build.specials.obscpio', 'x') as archivefile:
+            self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
+
+    def cpio_directories(self) -> None:
+        logging.debug("walk via %s", self.outdir)
+        os.chdir(self.outdir)
+        listing = sorted(os.listdir("."))
+        specials = []
+        for name in listing:
+            if name in ('.git', '.gitattributes') and not self.keep_meta:
+                continue
+            if name[0:1] == '.':
+                specials.append(name)
+                continue
+            if os.path.islink(name):
+                specials.append(name)
+                continue
+            if os.path.isfile(name) and os.access(name, os.X_OK):
+                specials.append(name)
+            if os.path.isdir(name):
+                logging.info("CPIO %s ", name)
+                self.cpio_directory(name)
+                shutil.rmtree(name)
+        if specials:
+            self.cpio_specials(specials)
+            for name in specials:
+                if os.path.isdir(name):
+                    shutil.rmtree(name)
+                else:
+                    os.unlink(name)
+
+    def get_assets(self) -> None:
+        logging.info("downloading assets")
+        cmd = [ download_assets ]
+        for arch in self.arch:
+            cmd += [ '--arch', arch ]
+        for asset_type in self.asset_types_filter:
+            cmd += [ '--type', asset_type ]
+        if pack_directories:
+            cmd += [ '--noassetdir', '--', self.outdir ]
+        else:
+            cmd += [ '--unpack', '--noassetdir', '--', self.outdir ]
+        self.run_cmd(cmd, fatal="asset download")
+
+    def copyfile(self, src: str, dst: str) -> None:
+        shutil.copy2(os.path.join(self.outdir, src), os.path.join(self.outdir, dst))
+
+    def export_debian_files(self) -> None:
+        if os.path.isfile(self.outdir + "/debian/control") and \
+                not os.path.isfile(self.outdir + "/debian.control"):
+            self.copyfile("debian/control", "debian.control")
+        if os.path.isfile(self.outdir + "/debian/changelog") and \
+                not os.path.isfile(self.outdir + "/debian.changelog"):
+            self.copyfile("debian/changelog", "debian.changelog")
+
+    def get_debian_origtar(self) -> None:
+        if os.path.isfile(self.outdir + "/debian/control"):
+            if not self.subdir:
+                self.fetch_tags()
+            cmd = [ export_debian_orig_from_git, self.outdir ]
+            logging.info("exporting debian origtar")
+            self.run_cmd(cmd, fatal="debian origtar export")
+
+    def get_subdir_info(self, path: str) -> str:
+        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', '-d', 'HEAD', '--end-of-options', path ]
+        output = self.run_cmd(cmd, fatal="git ls-tree")
+        for line in output.splitlines():
+            lstree = line.split(maxsplit=4)
+            if len(lstree[2]) >= 40:
+                return lstree[2]
+        self.die(f"could not determine tree info of {path}")
+
+    def write_info_file(self, filename: str, info: str) -> None:
+        if not filename.startswith("/"):
+            filename = self.outdir + "/" + filename
+        if os.path.lexists(filename):
+            self.die(f"the {filename} file must not be part of the git repository")
+        with open(filename, 'x') as infofile:
+            infofile.write(info + '\n')
+
+    def write_service_info(self) -> None:
+        info = None
+        if self.subdir:
+            info = self.get_subdir_info(self.subdir)
+        else:
+            cmd = [ 'git', '-C', self.clonedir, 'rev-parse', 'HEAD' ]
+            info = self.run_cmd(cmd, fatal="git rev-parse HEAD")
+            info = info.strip()
+        if info:
+            self.write_info_file(os.path.join(self.outdir, "_service_info"), info)
+
+    def write_package_xml_file(self, name: str, url: str, projectscmsync: str=None) -> None:
+        if self.onlybuild and name not in self.onlybuild.keys():
+            return
+        filename = f"{self.outdir}/{name}.xml"
+        with open(filename, 'x') as xmlfile:
+            xmlfile.write(f"""<package name="{escape(name)}">\n""")
+            if self.enforce_bcntsynctag:
+                xmlfile.write(f"""<bcntsynctag>{escape(name)}</bcntsynctag>\n""")
+            if projectscmsync:
+                xmlfile.write(f"""<url>{escape(projectscmsync)}</url>\n""")
+            xmlfile.write(f"""<scmsync>{escape(url)}</scmsync>\n</package>\n""")
+
+    def write_package_xml_local_link(self, name: str, target: str, projectscmsync: str=None) -> None:
+        if self.onlybuild and not name in self.onlybuild.keys():
+            return
+        filename = f"{self.outdir}/{name}.xml"
+        with open(filename, 'x') as xmlfile:
+            xmlfile.write(f"""<package name="{escape(name)}">""")
+            if self.enforce_bcntsynctag:
+                xmlfile.write(f"""<bcntsynctag>{escape(name)}</bcntsynctag>""")
+            if projectscmsync:
+                xmlfile.write(f"""<url>{escape(projectscmsync)}</url>\n""")
+            xmlfile.write("""</package>""")
+        filename = f"{self.outdir}/{name}.link"
+        with open(filename, 'x') as linkfile:
+            linkfile.write(f"""<link package="{escape(target)}" cicount="copy" />""")
+
+    def list_submodule_revisions(self, subdir: str) -> Dict[str, str]:
+        revisions = {}
+        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', 'HEAD', '--end-of-options', (subdir if subdir else '.') ]
+        output = self.run_cmd(cmd, fatal="git ls-tree")
+        for line in output.splitlines():
+            lstree = line.split(maxsplit=4)
+            if lstree[1] == 'commit' and len(lstree[2]) >= 40:
+                revisions[lstree[3]] = lstree[2]
+        return revisions
+
+    def process_package_submodule(self, name: str, subdir: str) -> None:
+        if not self._REGEXP.match(name):
+            logging.warn("submodule name contains invalid char: %s", name)
+            return
+
+        section = self.gsmpath[subdir + name]
+        if not section:
+            logging.warn("submodule not configured for %s", subdir + name)
+            return
+        gsmsection = self.gsmconfig[section]
+
+        urlstr = gsmsection['url']
+        if not urlstr:
+            self.die(f"url not defined for submodule {section}")
+
+        revisions = self.gsmrevisions.get(subdir)
+        if not revisions:
+            revisions = self.gsmrevisions[subdir] = self.list_submodule_revisions(subdir)
+
+        revision = revisions.get(gsmsection['path'])
+        if not revision:
+            self.die(f"could not determine revision of submodule for {gsmsection['path']}")
+
+        url = list(urllib.parse.urlparse(urlstr))
+        url[5] = revision
+        if 'branch' in gsmsection:
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
+            query['trackingbranch'] = [gsmsection['branch']]
+            url[4] = urllib.parse.urlencode(query, doseq=True)
+        if self.arch:
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
+            query['arch'] = self.arch
+            url[4] = urllib.parse.urlencode(query, doseq=True)
+        if self.asset_types_filter:
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
+            query['buildtype'] = self.asset_types_filter
+            url[4] = urllib.parse.urlencode(query, doseq=True)
+        if self.add_noobsinfo:
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
+            query['noobsinfo'] = [ '1' ]
+            url[4] = urllib.parse.urlencode(query, doseq=True)
+
+        unparsed_url = urllib.parse.urlunparse(url)
+        if ".." == unparsed_url[0:2]:
+            unparsed_url = urllib.parse.urljoin(self.scmtoolurl+'/', unparsed_url)
+        if self.url[0][0:4] == 'git+':
+            unparsed_url = 'git+' + unparsed_url
+
+        projectscmsync = urllib.parse.urlunparse(self.url)
+
+        self.write_package_xml_file(name, unparsed_url, projectscmsync)
+        self.write_info_file(name + ".info", revision)
+
+    def process_package_subdirectory(self, name: str, subdir: str) -> None:
+        if not self._REGEXP.match(name):
+            logging.warn("directory name contains invalid char: %s", name)
+            return
+
+        info = self.get_subdir_info(subdir + name)
+        self.write_info_file(name + ".info", info)
+
+        url = self.url.copy()
+        query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
+        query['subdir'] = subdir + name
+        url[4] = urllib.parse.urlencode(query, doseq=True)
+        if self.revision:
+            url[5] = self.revision
+        if self.arch:
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
+            query['arch'] = self.arch
+            url[4] = urllib.parse.urlencode(query, doseq=True)
+        if self.asset_types_filter:
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
+            query['buildtype'] = self.asset_types_filter
+            url[4] = urllib.parse.urlencode(query, doseq=True)
+        if self.add_noobsinfo:
+            query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
+            query['noobsinfo'] = 1
+            url[4] = urllib.parse.urlencode(query, doseq=True)
+
+        self.write_package_xml_file(name, urllib.parse.urlunparse(url))
+
+    def process_package_locallink(self, name: str, target: str) -> None:
+        if not self._REGEXP.match(name):
+            logging.warn("locallink name contains invalid char: %s", name)
+            return
+        if not self._REGEXP.match(target):
+            logging.warn("locallink target contains invalid char: %s", target)
+            return
+        self.write_package_xml_local_link(name, target)
+
+    def parse_gsmconfig(self):
+        self.gsmconfig = configparser.ConfigParser()
+
+        gitmodules = None
+        with open(self.clonedir + '/.gitmodules') as f:
+            gitmodules = f.read()
+        gitmodules = "\n".join([line.lstrip() for line in gitmodules.split("\n")])
+
+        self.gsmconfig.read_string(gitmodules)
+        gsmpath = {}
+        for section in self.gsmconfig.sections():
+            gsmconfig = self.gsmconfig[section]
+            if 'path' not in gsmconfig:
+                logging.warn("path not defined for git submodule " + section)
+                continue
+            path = gsmconfig['path']
+            if path in gsmpath:
+                logging.warn("multiple definitions of %s path in git submodule config", path)
+                continue
+            gsmpath[path] = section
+        self.gsmpath = gsmpath
+
+    def generate_project_files(self) -> None:
+        clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
+        self.clonedir = clonedir
+        self.do_clone(clonedir)
+        if self.subdir:
+            self.check_subdir(self.subdir)
+        if not os.path.isdir(self.outdir):
+            os.makedirs(self.outdir)
+        if not self.subdir or write_obsinfo_with_subdir:
+            self.write_obsinfo()
+        os.chdir(self.outdir)
+        subdir = self.subdir + '/' if self.subdir else ''
+        if os.path.isfile(clonedir + '/.gitmodules'):
+            self.parse_gsmconfig()
+        self.generate_package_xml_files_of_directory(subdir)
+        shutil.rmtree(clonedir)
+        self.clonedir = None
+
+    def generate_package_xml_files_of_directory(self, subdir) -> None:
+        if subdir:
+            self.verify_subdir(subdir)
+            self.check_subdir(subdir)
+        directory = (self.clonedir + '/' + subdir).rstrip('/')
+        logging.debug("check %s (subdir=%s)", directory, subdir)
+
+        if os.path.isfile(directory + '/_config'):
+            shutil.move(directory + '/_config', '.')
+            self.processed['_config'] = True
+
+        packages = None
+        subdirectories = []
+
+        if os.path.isfile(directory + '/_manifest'):
+            (packages, subdirectories) = read_project_manifest(directory + '/_manifest')
+        elif os.path.isfile(directory + '/_subdirs'):
+            (packages, subdirectories) = read_project_subdirs(directory + '/_subdirs')
+
+        for newsubdir in subdirectories:
+            if (subdir + newsubdir + '/') in self.processed:
+                continue
+            self.processed[subdir + newsubdir + '/'] = True
+            self.generate_package_xml_files_of_directory(subdir + newsubdir + '/')
+
+        if packages is None:
+            logging.debug("walk via %s", directory)
+            packages = sorted(os.listdir(directory))
+
+        for name in packages:
+            if name in self.processed:
+                continue
+            fname = directory + '/' + name
+            if name == '.git':
+                if self.keep_meta and subdir == '':
+                    shutil.move(fname, '.')
+                    self.processed[name] = True
+            elif os.path.islink(fname):
+                target = os.readlink(fname).rstrip('/')
+                if not target or '/' in target or target.startswith('.'):
+                    logging.warn("only local links are supported, skipping: %s -> %s", name, target)
+                    continue
+                if not os.path.isdir(directory + '/' + target):
+                    logging.debug("skipping dangling symlink %s -> %s", name, target)
+                    continue
+                self.process_package_locallink(name, target)
+                self.processed[name] = True
+            elif os.path.isdir(fname):
+                if (subdir + name + '/') in self.processed:
+                    continue
+                if (subdir + name) in self.gsmpath:
+                    self.process_package_submodule(name, subdir)
+                else:
+                    self.process_package_subdirectory(name, subdir)
+                self.processed[name] = True

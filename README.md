@@ -106,6 +106,36 @@ These configuration files are optional and usually only used on OBS server side.
   PROJECT\_NAMESPACE is also valid for all sub projects. When using '*' it is
   valid for all projects.
 
+Python module usecase
+=====================
+
+We provide a python module to parse the structure of a cloned project git
+repository. 
+
+The method
+
+  list_packages(directory: str) -> List[Tuple[str, str, Optional[str]]]
+
+is parsing the _manifest file and reads the .gitsubmodule file. It gives 
+you a tuple for each package source providing:
+
+ * package name
+
+   As it appears in OBS. It is not including build flavors.
+
+ * relative directory name
+
+   Depending on the configuration this can be in any subdirectory.
+   In default configuration it would be identical to package name.
+
+ * Git submodule path
+   
+   This might be a relative path or absolute url to another git
+   repository providing the package source. In SUSE cases this
+   is often just ../pool/REPOSITORY_NAME for example. Please note
+   that PACKAGE_NAME and REPOSITORY_NAME is often the same, but
+   not guaranteed.
+
 
 TODO
 ====
@@ -115,6 +145,4 @@ TODO
  * find a better way to store files in .osc and .assets of the checkout, as
    they do not belong to the git repository
     auto extending .gitignore? (esp. when downloading asset files?)
-
- * make cpio generation bit identical (avoiding mtime from clone)
 
