@@ -35,7 +35,7 @@ URL:            https://github.com/openSUSE/obs-scm-bridge
 Source0:        %{name}-%{version}.tar.xz
 BuildRequires:  %{primary_python}
 BuildRequires:  %{primary_python}-PyYAML
-Requires:       %{build_pkg_name} >= 20211125
+Requires:       %{build_pkg_name} >= 20260323
 # these are just recommends in build package, but we need it here
 Requires:       perl(Date::Parse)
 Requires:       git-lfs

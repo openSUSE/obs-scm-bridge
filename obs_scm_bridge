@@ -61,6 +61,7 @@ class ObsGit(object):
     def __init__(self, outdir: str, url: str, projectscmsync: str) -> None:
         self.outdir   = outdir
         self.clonedir = None
+        self.tstamp = None
         self.revision = None
         self.trackingbranch = None
         self.subdir   = None
@@ -387,6 +388,7 @@ class ObsGit(object):
             cmd = [ 'git', 'log', '-n1', '--no-show-signature', '--pretty=format:%H %ct', '--end-of-options', self.subdir]
             line = self.run_cmd(cmd, cwd=self.clonedir, fatal="git log")
             commit, tstamp = line.split()
+        self.tstamp = tstamp
         infofile = os.path.join(self.outdir, '_scmsync.obsinfo')
         if os.path.lexists(infofile):
             self.die("the _scmsync.obsinfo file must not be part of the git repository")
@@ -458,17 +460,23 @@ class ObsGit(object):
         logging.info("fetching all tags")
         self.run_cmd(cmd, fatal="fetch --tags")
 
-    def cpio_directory(self, directory: str) -> None:
+    def cpio_directory(self, directory: str, mtime: Optional[str]=None) -> None:
         logging.info("create archivefile for %s", directory)
-        cmd = [ download_assets, '--create-cpio', '--', directory ]
+        cmd = [ download_assets, '--create-cpio' ]
+        if mtime is not None:
+            cmd += [ '--mtime', mtime ]
+        cmd += [ '--', directory ]
         with open(directory + '.obscpio', 'x') as archivefile:
             self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
 
-    def cpio_specials(self, specials: List[str]) -> None:
+    def cpio_specials(self, specials: List[str], mtime: Optional[str]=None) -> None:
         if not specials:
             return
         logging.info("create archivefile for specials")
-        cmd = [ download_assets, '--create-cpio', '--', '.' ] + specials
+        cmd = [ download_assets, '--create-cpio' ]
+        if mtime is not None:
+            cmd += [ '--mtime', mtime ]
+        cmd += [ '--', '.' ] + specials
         with open('build.specials.obscpio', 'x') as archivefile:
             self.run_cmd(cmd, stdout=archivefile, fatal="cpio creation")
 
@@ -496,10 +504,10 @@ class ObsGit(object):
                 ### continue
             if os.path.isdir(name):
                 logging.info("CPIO %s ", name)
-                self.cpio_directory(name)
+                self.cpio_directory(name, mtime=self.tstamp)
                 shutil.rmtree(name)
         if specials:
-            self.cpio_specials(specials)
+            self.cpio_specials(specials, mtime=self.tstamp)
             for name in specials:
                 if os.path.isdir(name):
                     shutil.rmtree(name)
