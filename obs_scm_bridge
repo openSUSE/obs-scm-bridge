@@ -37,6 +37,7 @@ create_obsinfo = False
 rewrite_url_to_ssh = False
 write_obsinfo_with_subdir = True
 testcase_mode = False
+native_project_git = False
 
 if os.environ.get('DEBUG_SCM_BRIDGE') == "1":
     logging.getLogger().setLevel(logging.DEBUG)
@@ -52,6 +53,7 @@ if os.environ.get('OSC_VERSION'):
     create_obsinfo = False
     rewrite_url_to_ssh = True
     follow_tracking_branch = True
+    native_project_git = True
 os.environ['LANG'] = "C"
 
 class ObsGit(object):
@@ -735,6 +737,55 @@ class ObsGit(object):
             gsmpath[path] = section
         self.gsmpath = gsmpath
 
+    def checkout_project(self) -> None:
+        # clone project git without submodules
+        include_submodules = self.onlybuild == None
+        self.do_clone(self.outdir, include_submodules=include_submodules)
+        self.clonedir = self.outdir
+        if os.path.isfile(self.outdir + '/.gitmodules'):
+            self.parse_gsmconfig()
+        for package in self.onlybuild.keys():
+            self.update_package_submodules('')
+
+    def update_package_submodules(self, subdir) -> None:
+        if subdir:
+            self.verify_subdir(subdir)
+            self.check_subdir(subdir)
+        directory = (self.outdir + '/' + subdir).rstrip('/')
+        logging.debug("check %s (subdir=%s)", directory, subdir)
+
+        packages = None
+        subdirectories = []
+
+        if os.path.isfile(directory + '/_manifest'):
+            print("  reading ", directory + '/_manifest')
+            (packages, subdirectories) = self.read_project_manifest(directory + '/_manifest')
+
+        # handle all subdirectories
+        for newsubdir in subdirectories:
+            if (subdir + newsubdir + '/') in self.processed:
+                continue
+            self.processed[subdir + newsubdir + '/'] = True
+            self.update_package_submodules(subdir + newsubdir + '/')
+
+        if packages is None or len(packages) == 0:
+            logging.debug("walk via %s", directory)
+            packages = sorted(os.listdir(directory))
+
+        # handle plain files and directories
+        for name in packages:
+            if name in self.processed:
+                continue                # already handled
+            if self.onlybuild and name not in self.onlybuild.keys():
+                continue
+            fname = directory + '/' + name
+            if os.path.isdir(fname):
+                if (subdir + name) in self.gsmpath:
+                    self.process_package_submodule(name, subdir)
+                    cmd = [ 'git', '-C', outdir, 'submodule', 'update', '--init', subdir + name ]
+                    self.run_cmd(cmd, fatal='submodule update')
+                self.processed[name] = True
+
     def generate_project_files(self) -> None:
         clonedir = tempfile.mkdtemp(prefix="obs-scm-bridge")
         self.clonedir = clonedir
@@ -889,7 +940,11 @@ if __name__ == '__main__':
         obsgit.setup_credentials(credentials_config)
 
     if project_mode == 'true' or project_mode == '1':
-        obsgit.generate_project_files()
+        if native_project_git:
+            obsgit.checkout_project()
+        else:
+            # just create meta files for each package
+            obsgit.generate_project_files()
         sys.exit(0)
 
     obsgit.clone(include_submodules=True, write_service_info=pack_directories)
