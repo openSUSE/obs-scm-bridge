@@ -485,6 +485,7 @@ class ObsGit(object):
         os.chdir(self.outdir)
         listing = sorted(os.listdir("."))
         specials = []
+        xbitspecials = []
         for name in listing:
             if name in ('.git', '.gitattributes') and not self.keep_meta:
                 # we do not store git meta data by default to avoid bloat storage
@@ -498,16 +499,14 @@ class ObsGit(object):
             # FIXME: better way would be to store all permission flags git stores
             #        and re-apply them without moving them.
             if os.path.isfile(name) and os.access(name, os.X_OK):
-                specials.append(name)
-                # we package it twice as eg. executable spec files need still be available
-                # for the source server
-                ### continue
+                xbitspecials.append(name)
+                continue
             if os.path.isdir(name):
                 logging.info("CPIO %s ", name)
                 self.cpio_directory(name, mtime=self.tstamp)
                 shutil.rmtree(name)
-        if specials:
-            self.cpio_specials(specials, mtime=self.tstamp)
+        if specials or xbitspecials:
+            self.cpio_specials(specials + xbitspecials, mtime=self.tstamp)
             for name in specials:
                 if os.path.isdir(name):
                     shutil.rmtree(name)
