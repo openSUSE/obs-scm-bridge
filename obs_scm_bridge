@@ -827,6 +827,8 @@ class ObsGit(object):
                 if self.keep_meta and subdir == '':
                     shutil.move(fname, '.')
                     self.processed[name] = True
+            elif name[0] == '.':
+                continue
             elif os.path.islink(fname):
                 target = os.readlink(fname).rstrip('/') # this is no recursive lookup, but is there a usecase?
                 if not target or '/' in target or target.startswith('.'):
