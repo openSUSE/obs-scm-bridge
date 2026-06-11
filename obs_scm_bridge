@@ -613,12 +613,12 @@ class ObsGit(object):
 
     def process_package_submodule(self, name: str, subdir: str) -> None:
         if not self._REGEXP.match(name):
-            logging.warn("submodule name contains invalid char: %s", name)
+            logging.warning("submodule name contains invalid char: %s", name)
             return
 
         section = self.gsmpath[subdir + name]
         if not section:
-            logging.warn("submodule not configured for %s", subdir + name)
+            logging.warning("submodule not configured for %s", subdir + name)
             return
         gsmsection = self.gsmconfig[section]
 
@@ -672,7 +672,7 @@ class ObsGit(object):
     def process_package_subdirectory(self, name: str, subdir: str) -> None:
         # current directory is self.outdir
         if not self._REGEXP.match(name):
-            logging.warn("directory name contains invalid char: %s", name)
+            logging.warning("directory name contains invalid char: %s", name)
             return
 
         # add subdir info file
@@ -703,10 +703,10 @@ class ObsGit(object):
 
     def process_package_locallink(self, name: str, target: str) -> None:
         if not self._REGEXP.match(name):
-            logging.warn("locallink name contains invalid char: %s", name)
+            logging.warning("locallink name contains invalid char: %s", name)
             return
         if not self._REGEXP.match(target):
-            logging.warn("locallink target contains invalid char: %s", target)
+            logging.warning("locallink target contains invalid char: %s", target)
             return
         self.write_package_xml_local_link(name, target)
 
@@ -725,11 +725,11 @@ class ObsGit(object):
         for section in self.gsmconfig.sections():
             gsmconfig = self.gsmconfig[section]
             if 'path' not in gsmconfig:
-                logging.warn("path not defined for git submodule " + section)
+                logging.warning("path not defined for git submodule " + section)
                 continue
             path = gsmconfig['path']
             if path in gsmpath:
-                logging.warn("multiple definitions of %s path in git submodule config", path)
+                logging.warning("multiple definitions of %s path in git submodule config", path)
                 continue
             gsmpath[path] = section
         self.gsmpath = gsmpath
@@ -763,10 +763,10 @@ class ObsGit(object):
         if manifest_yml.get('packages'):
             for name in manifest_yml['packages']:
                 if not name or name.startswith('.') or name.startswith('/'):
-                    logging.warn("illegal packages entry '%s'", name)
+                    logging.warning("illegal packages entry '%s'", name)
                     continue
                 if '/' in name or '*' in name: # for now
-                    logging.warn("packages entry with '/' or '*' not implemented yet")
+                    logging.warning("packages entry with '/' or '*' not implemented yet")
                     continue
                 packages.append(name)
         if manifest_yml.get('subdirectories'):
@@ -830,7 +830,7 @@ class ObsGit(object):
             elif os.path.islink(fname):
                 target = os.readlink(fname).rstrip('/') # this is no recursive lookup, but is there a usecase?
                 if not target or '/' in target or target.startswith('.'):
-                    logging.warn("only local links are supported, skipping: %s -> %s", name, target)
+                    logging.warning("only local links are supported, skipping: %s -> %s", name, target)
                     continue
                 if not os.path.isdir(directory + '/' + target):
                     logging.debug("skipping dangling symlink %s -> %s", name, target)
