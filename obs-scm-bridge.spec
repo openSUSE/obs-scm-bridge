@@ -27,7 +27,7 @@
 %endif
 
 Name:           obs-scm-bridge
-Version:        0.7.4
+Version:        0.7.5
 Release:        0
 Summary:        A help service to work with git repositories in OBS
 License:        GPL-2.0-or-later
