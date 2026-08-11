@@ -50,6 +50,11 @@ Any top level subdirectory will be handled as package container.
 It is recomended to use git submodules for each package if it is a larger
 project. This allows partial cloning of the specific package.
 
+It is recommended to have also a _manifest file defining the package layout.
+Check manifest_schema.json file for the schema documentation. A minimal
+file can be empty, just to identify the git repository as package set for pbuild
+and OBS.
+
 Special directives
 ==================
 

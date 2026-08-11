@@ -759,6 +759,11 @@ class ObsGit(object):
         directory = os.path.dirname(filename)
         with open(filename) as stream:
             manifest_yml = yaml.safe_load(stream)
+
+        if manifest_yml is None:
+            # allowing an empty _manifest file
+            return packages, subdirectories
+
         if 'packages' in manifest_yml:
             packages = []
         if manifest_yml.get('packages'):
