@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "packages": {
-      "type": "array",
+      "type": ["array", "null"],
       "items": {
         "type": "string",
         "pattern": "^[a-zA-Z0-9\\-_\\+][a-zA-Z0-9.\\-_\\+]*$"

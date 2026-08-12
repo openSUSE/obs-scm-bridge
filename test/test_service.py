@@ -14,7 +14,7 @@ _AAA_BASE_URL = "https://github.com/openSUSE/aaa_base"
 _LIBECONF_URL = "https://github.com/openSUSE/libeconf"
 
 CONTAINERFILE = f"""RUN set -eux; \
-    zypper -n in python313 git-core python313-PyYAML diffutils; \
+    zypper -n in python313 git-core python313-PyYAML python313-jsonschema diffutils; \
     . /etc/os-release && [[ ${{NAME}} = "SLES" ]] || zypper -n in git-lfs; \
     zypper -n in -f --recommends build; \
     zypper -n clean; rm -rf /var/log/zypp*

@@ -8,13 +8,14 @@ readme = "README.md"
 packages = [{include = "obs_scm_bridge"}]
 
 [tool.poetry.dependencies]
-python = ">=3.6.2,<4.0"
+python = ">=3.11.0,<4.0"
 pyyaml = ">=6.0.0"
+jsonschema = ">=4.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest-container = { git = "https://github.com/dcermak/pytest_container.git", branch = "main" }
 pytest-xdist = ">=3.0"
 
 [build-system]
-requires = ["poetry-core", "pyyaml"]
+requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
