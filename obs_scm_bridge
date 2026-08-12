@@ -806,7 +806,7 @@ class ObsGit(object):
         directory = (self.clonedir + '/' + subdir).rstrip('/')
         logging.debug("check %s (subdir=%s)", directory, subdir)
 
-        if os.path.isfile(directory + '/_config'):
+        if '_config' not in self.processed and os.path.isfile(directory + '/_config'):
             shutil.move(directory + '/_config', '.')
             self.processed['_config'] = True
 
