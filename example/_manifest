@@ -1,0 +1,9 @@
+# An example _manifest file
+
+packages:
+
+subdirectories:
+ - pkg/a
+ - pkg/b
+ - pkg/lib
+

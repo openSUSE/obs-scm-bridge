@@ -14,7 +14,7 @@ _AAA_BASE_URL = "https://github.com/openSUSE/aaa_base"
 _LIBECONF_URL = "https://github.com/openSUSE/libeconf"
 
 CONTAINERFILE = f"""RUN set -eux; \
-    zypper -n in python311 git-core diff python311-PyYAML; \
+    zypper -n in python313 git-core python313-PyYAML python313-jsonschema diffutils; \
     . /etc/os-release && [[ ${{NAME}} = "SLES" ]] || zypper -n in git-lfs; \
     zypper -n in -f --recommends build; \
     zypper -n clean; rm -rf /var/log/zypp*
@@ -40,7 +40,7 @@ RUN set -euo pipefail; \
     git add libeconf aaa_base; git commit -m "initial commit";
 
 COPY obs_scm_bridge /usr/bin/
-RUN sed -i 's,^#!/usr/bin/python3.*,#!/usr/bin/python3.11,' /usr/bin/obs_scm_bridge
+RUN sed -i 's,^#!/usr/bin/python3.*,#!/usr/bin/python3.13,' /usr/bin/obs_scm_bridge
 RUN chmod +x /usr/bin/obs_scm_bridge
 """
 
@@ -63,7 +63,7 @@ BCI_BASE_LATEST = DerivedContainer(
     extra_environment_variables=EXTRA_ENVIRONMENT_VARIABLES
 )
 
-CONTAINER_IMAGES = [TUMBLEWEED, LEAP_LATEST, BCI_BASE_LATEST]
+CONTAINER_IMAGES = [TUMBLEWEED, LEAP_LATEST] #, BCI_BASE_LATEST]
 
 
 _OBS_SCM_BRIDGE_CMD = "obs_scm_bridge --debug 1"

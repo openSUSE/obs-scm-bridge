@@ -756,8 +756,14 @@ class ObsGit(object):
         packages = None
         subdirectories = []
         manifest_yml = None
+        directory = os.path.dirname(filename)
         with open(filename) as stream:
             manifest_yml = yaml.safe_load(stream)
+
+        if manifest_yml is None:
+            # allowing an empty _manifest file
+            return packages, subdirectories
+
         if 'packages' in manifest_yml:
             packages = []
         if manifest_yml.get('packages'):
@@ -771,6 +777,9 @@ class ObsGit(object):
                 packages.append(name)
         if manifest_yml.get('subdirectories'):
             for newsubdir in manifest_yml['subdirectories']:
+                if manifest_yml.get('skip_missing_subdirectories') == "true":
+                    if not os.path.exists(directory + "/" + newsubdir):
+                        continue
                 if newsubdir:
                     subdirectories.append(newsubdir)
         return packages, subdirectories
