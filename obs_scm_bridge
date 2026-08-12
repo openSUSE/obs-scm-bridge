@@ -749,6 +749,8 @@ class ObsGit(object):
         if os.path.isfile(clonedir + '/.gitmodules'):
             self.parse_gsmconfig()
         self.generate_package_xml_files_of_directory(subdir)
+        if self.keep_meta and subdir == '' and os.path.isdir(clonedir + '/.git'):
+            shutil.move(clonedir + '/.git', '.')
         shutil.rmtree(clonedir)
         self.clonedir = None
 
@@ -823,11 +825,7 @@ class ObsGit(object):
             if name in self.processed:
                 continue                # already handled
             fname = directory + '/' + name
-            if name == '.git':
-                if self.keep_meta and subdir == '':
-                    shutil.move(fname, '.')
-                    self.processed[name] = True
-            elif name[0] == '.':
+            if name[0] == '.':
                 continue
             elif os.path.islink(fname):
                 target = os.readlink(fname).rstrip('/') # this is no recursive lookup, but is there a usecase?
