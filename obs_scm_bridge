@@ -79,8 +79,7 @@ class ObsGit(object):
         self.shallow_clone = shallow_clone
         self.create_obsinfo = create_obsinfo
         self.add_noobsinfo = False
-        #: git submodule config, if present
-        self.gsmconfig: Optional[configparser.ConfigParser] = None
+        # git submodule configuration
         self.gsmpath = {}
         self.gsmrevisions = {}
         self.asset_types_filter = [] # all by default
@@ -616,13 +615,12 @@ class ObsGit(object):
             logging.warning("submodule name contains invalid char: %s", name)
             return
 
-        section = self.gsmpath[subdir + name]
-        if not section:
+        if subdir + name not in self.gsmpath:
             logging.warning("submodule not configured for %s", subdir + name)
             return
-        gsmsection = self.gsmconfig[section]
+        (section, config) = self.gsmpath[subdir + name]
 
-        urlstr = gsmsection['url']
+        urlstr = config['url']
         if not urlstr:
             self.die(f"url not defined for submodule {section}")
 
@@ -630,16 +628,16 @@ class ObsGit(object):
         if not revisions:
             revisions = self.gsmrevisions[subdir] = self.list_submodule_revisions(subdir)
 
-        revision = revisions.get(gsmsection['path'])
+        revision = revisions.get(config['path'])
         if not revision:
-            self.die(f"could not determine revision of submodule for {gsmsection['path']}")
+            self.die(f"could not determine revision of submodule for {config['path']}")
 
         # write xml file and register the module
         url = list(urllib.parse.urlparse(urlstr))
         url[5] = revision
-        if 'branch' in gsmsection:
+        if 'branch' in config:
             query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
-            query['trackingbranch'] = [gsmsection['branch']]
+            query['trackingbranch'] = [config['branch']]
             url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.arch:
             query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
@@ -711,7 +709,7 @@ class ObsGit(object):
         self.write_package_xml_local_link(name, target)
 
     def parse_gsmconfig(self):
-        self.gsmconfig = configparser.ConfigParser()
+        gsmconfig = configparser.ConfigParser()
 
         # the parser stumbles over a mix of space and tabs. So, let's strip
         # leading whitespaces first
@@ -720,18 +718,18 @@ class ObsGit(object):
             gitmodules = f.read()
         gitmodules = "\n".join([line.lstrip() for line in gitmodules.split("\n")])
 
-        self.gsmconfig.read_string(gitmodules)
+        gsmconfig.read_string(gitmodules)
         gsmpath = {}
-        for section in self.gsmconfig.sections():
-            gsmconfig = self.gsmconfig[section]
-            if 'path' not in gsmconfig:
+        for section in gsmconfig.sections():
+            config = gsmconfig[section]
+            if 'path' not in config:
                 logging.warning("path not defined for git submodule " + section)
                 continue
-            path = gsmconfig['path']
+            path = config['path']
             if path in gsmpath:
                 logging.warning("multiple definitions of %s path in git submodule config", path)
                 continue
-            gsmpath[path] = section
+            gsmpath[path] = (section, config)
         self.gsmpath = gsmpath
 
     def generate_project_files(self) -> None:
@@ -745,9 +743,9 @@ class ObsGit(object):
         if not self.subdir or write_obsinfo_with_subdir:
             self.write_obsinfo()
         os.chdir(self.outdir)
-        subdir = self.subdir + '/' if self.subdir else ''
         if os.path.isfile(clonedir + '/.gitmodules'):
             self.parse_gsmconfig()
+        subdir = self.subdir + '/' if self.subdir else ''
         self.generate_package_xml_files_of_directory(subdir)
         if self.keep_meta and subdir == '' and os.path.isdir(clonedir + '/.git'):
             shutil.move(clonedir + '/.git', '.')
