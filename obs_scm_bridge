@@ -602,7 +602,7 @@ class ObsGit(object):
 
     def list_submodule_revisions(self, subdir: str) -> Dict[str, str]:
         revisions = {}
-        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', 'HEAD', '--end-of-options', (subdir if subdir else '.') ]
+        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', 'HEAD', '--end-of-options', (subdir + '/' if subdir else '.') ]
         output = self.run_cmd(cmd, fatal="git ls-tree")
         for line in output.splitlines():
             lstree = line.split(maxsplit=4)
@@ -610,27 +610,22 @@ class ObsGit(object):
                 revisions[lstree[3]] = lstree[2]
         return revisions
 
-    def process_package_submodule(self, name: str, subdir: str) -> None:
-        if not self._REGEXP.match(name):
-            logging.warning("submodule name contains invalid char: %s", name)
-            return
+    def get_submodule_revision(self, path: str) -> str:
+        dir = os.path.dirname(path)
+        revisions = self.gsmrevisions.get(dir)
+        if not revisions:
+            revisions = self.gsmrevisions[dir] = self.list_submodule_revisions(dir)
+        revision = revisions.get(path)
+        if not revision:
+            self.die(f"could not determine revision of submodule for {path}")
+        return revision
 
-        if subdir + name not in self.gsmpath:
-            logging.warning("submodule not configured for %s", subdir + name)
-            return
-        (section, config) = self.gsmpath[subdir + name]
-
+    def process_package_submodule(self, name: str, path: str, info) -> None:
+        (section, config) = info
         urlstr = config['url']
         if not urlstr:
             self.die(f"url not defined for submodule {section}")
-
-        revisions = self.gsmrevisions.get(subdir)
-        if not revisions:
-            revisions = self.gsmrevisions[subdir] = self.list_submodule_revisions(subdir)
-
-        revision = revisions.get(config['path'])
-        if not revision:
-            self.die(f"could not determine revision of submodule for {config['path']}")
+        revision = self.get_submodule_revision(path)
 
         # write xml file and register the module
         url = list(urllib.parse.urlparse(urlstr))
@@ -658,7 +653,8 @@ class ObsGit(object):
             # need to append a '/' to the base url so that the relative
             # path is properly resolved, otherwise we might descend one
             # directory too far
-            unparsed_url = urllib.parse.urljoin(self.scmtoolurl+'/', unparsed_url)
+            base_url = self.scmtoolurl + '/'
+            unparsed_url = urllib.parse.urljoin(base_url, unparsed_url)
         if self.url[0][0:4] == 'git+':
             unparsed_url = 'git+' + unparsed_url
 
@@ -667,20 +663,15 @@ class ObsGit(object):
         self.write_package_xml_file(name, unparsed_url, projectscmsync)
         self.write_info_file(name + ".info", revision)
 
-    def process_package_subdirectory(self, name: str, subdir: str) -> None:
-        # current directory is self.outdir
-        if not self._REGEXP.match(name):
-            logging.warning("directory name contains invalid char: %s", name)
-            return
-
+    def process_package_subdirectory(self, name: str, path: str) -> None:
         # add subdir info file
-        info = self.get_subdir_info(subdir + name)
+        info = self.get_subdir_info(path)
         self.write_info_file(name + ".info", info)
 
         # add subdir parameter to url
         url = self.url.copy()
         query = urllib.parse.parse_qs(url[4], keep_blank_values=True)
-        query['subdir'] = subdir + name
+        query['subdir'] = path
         url[4] = urllib.parse.urlencode(query, doseq=True)
         if self.revision:
             url[5] = self.revision
@@ -700,9 +691,6 @@ class ObsGit(object):
         self.write_package_xml_file(name, urllib.parse.urlunparse(url))
 
     def process_package_locallink(self, name: str, target: str) -> None:
-        if not self._REGEXP.match(name):
-            logging.warning("locallink name contains invalid char: %s", name)
-            return
         if not self._REGEXP.match(target):
             logging.warning("locallink target contains invalid char: %s", target)
             return
@@ -746,7 +734,20 @@ class ObsGit(object):
         if os.path.isfile(clonedir + '/.gitmodules'):
             self.parse_gsmconfig()
         subdir = self.subdir + '/' if self.subdir else ''
-        self.generate_package_xml_files_of_directory(subdir)
+        for name, path, kind, info in self.list_packages(subdir):
+            if not self._REGEXP.match(name):
+                logging.warning("%s name contains invalid char: %s", kind, name)
+                continue
+            if kind == 'config':
+                shutil.move(self.clonedir + '/' + path, '_config')
+            elif kind == 'link':
+                self.process_package_locallink(name, info)
+            elif kind == 'submodule':
+                self.process_package_submodule(name, path, info)
+            elif kind == 'subdirectory':
+                self.process_package_subdirectory(name, path)
+            else:
+                self.die(f"unsupported kind in list_packages output: {kind}")
         if self.keep_meta and subdir == '' and os.path.isdir(clonedir + '/.git'):
             shutil.move(clonedir + '/.git', '.')
         shutil.rmtree(clonedir)
@@ -797,15 +798,17 @@ class ObsGit(object):
             packages = []
         return packages, subdirectories
 
-    def generate_package_xml_files_of_directory(self, subdir) -> None:
+    def list_packages(self, subdir='') -> list:
+        result = []
         if subdir:
             self.verify_subdir(subdir)
             self.check_subdir(subdir)
+            subdir = subdir.rstrip('/') + '/' # make sure subdir ends with a slash
         directory = (self.clonedir + '/' + subdir).rstrip('/')
         logging.debug("check %s (subdir=%s)", directory, subdir)
 
         if '_config' not in self.processed and os.path.isfile(directory + '/_config'):
-            shutil.move(directory + '/_config', '.')
+            result.append(('_config', subdir + '_config', 'config', None))
             self.processed['_config'] = True
 
         packages = None
@@ -821,7 +824,7 @@ class ObsGit(object):
             if (subdir + newsubdir + '/') in self.processed:
                 continue
             self.processed[subdir + newsubdir + '/'] = True
-            self.generate_package_xml_files_of_directory(subdir + newsubdir + '/')
+            result += self.list_packages(subdir + newsubdir + '/')
 
         if packages is None:
             logging.debug("walk via %s", directory)
@@ -829,12 +832,12 @@ class ObsGit(object):
 
         # handle plain files and directories
         for name in packages:
+            if name[0] == '.':
+                continue
             if name in self.processed:
                 continue                # already handled
             fname = directory + '/' + name
-            if name[0] == '.':
-                continue
-            elif os.path.islink(fname):
+            if os.path.islink(fname):
                 target = os.readlink(fname).rstrip('/') # this is no recursive lookup, but is there a usecase?
                 if not target or '/' in target or target.startswith('.'):
                     logging.warning("only local links are supported, skipping: %s -> %s", name, target)
@@ -842,16 +845,18 @@ class ObsGit(object):
                 if not os.path.isdir(directory + '/' + target):
                     logging.debug("skipping dangling symlink %s -> %s", name, target)
                     continue
-                self.process_package_locallink(name, target)
+                result.append((name, subdir + name, 'link', target))
                 self.processed[name] = True
             elif os.path.isdir(fname):
                 if (subdir + name + '/') in self.processed:
                     continue            # already handled in _subdir loop
                 if (subdir + name) in self.gsmpath:
-                    self.process_package_submodule(name, subdir)
+                    result.append((name, subdir + name, 'submodule', self.gsmpath[subdir + name]))
                 else:
-                    self.process_package_subdirectory(name, subdir)
+                    result.append((name, subdir + name, 'subdirectory', None))
                 self.processed[name] = True
+
+        return result
 
 if __name__ == '__main__':
 
