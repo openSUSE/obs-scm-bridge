@@ -29,7 +29,7 @@ RUN mkdir -p {_RPMS_DIR}ring0 && \
     cd {_RPMS_DIR}ring0 && \
     git init && git submodule add {_AAA_BASE_URL} && \
     git commit -m "add aaa_base" && \
-    git submodule add ../libeconf && git commit -m "add libeconf" && \
+    git submodule add -b master ../libeconf && git commit -m "add libeconf" && \
     cd aaa_base && git rev-parse HEAD > /src/aaa_base
 
 RUN set -euo pipefail; \
@@ -132,7 +132,7 @@ def test_creates_packagelist(auto_container_per_test: ContainerData):
     ):
         assert file_name in files
 
-    def _test_pkg_xml(pkg_name: str, expected_url: str, expected_head_hash: str):
+    def _test_pkg_xml(pkg_name: str, expected_url: str, expected_head_hash: str, tracking_branch: str):
         conf = ET.fromstring(
             auto_container_per_test.connection.file(
                 f"{dest}/{pkg_name}.xml"
@@ -140,11 +140,13 @@ def test_creates_packagelist(auto_container_per_test: ContainerData):
         )
         assert conf.attrib["name"] == pkg_name
         scm_sync_elements = conf.findall("scmsync")
+        if tracking_branch:
+            expected_url += f"?trackingbranch={tracking_branch}"
         assert len(scm_sync_elements) == 1 and scm_sync_elements[0].text
         assert f"{expected_url}#{expected_head_hash}" in scm_sync_elements[0].text
 
-    _test_pkg_xml("aaa_base", _AAA_BASE_URL, aaa_base_hash)
-    _test_pkg_xml("libeconf", f"{_RPMS_DIR}libeconf", libeconf_hash)
+    _test_pkg_xml("aaa_base", _AAA_BASE_URL, aaa_base_hash, None)
+    _test_pkg_xml("libeconf", f"{_RPMS_DIR}libeconf", libeconf_hash, "master")
 
     for pkg_name, pkg_head_hash in (
         ("aaa_base", aaa_base_hash),
@@ -218,9 +220,9 @@ def test_checks_out_project_with_submodules(
         for pkg_name in ("libeconf", "aaa_base")
     )
 
-    for pkg_name, pkg_url, pkg_head_hash in (
-        ("libeconf", f"file://{_RPMS_DIR}libeconf", libeconf_hash),
-        ("aaa_base", _AAA_BASE_URL, aaa_base_hash),
+    for pkg_name, pkg_url, pkg_head_hash, tracking_branch in (
+        ("libeconf", f"file://{_RPMS_DIR}libeconf", libeconf_hash, "master"),
+        ("aaa_base", _AAA_BASE_URL, aaa_base_hash, None),
     ):
         info_file = auto_container_per_test.connection.file(f"{dest}/{pkg_name}.info")
         assert info_file.exists
@@ -238,6 +240,8 @@ def test_checks_out_project_with_submodules(
         )
         assert pkg_meta.attrib["name"] == pkg_name
         scm_sync = pkg_meta.findall("scmsync")
+        if tracking_branch:
+            pkg_url += f"?trackingbranch={tracking_branch}"
         assert (
             len(scm_sync) == 1
             and scm_sync[0].text
@@ -284,7 +288,7 @@ def test_lfs_opt_out(auto_container_per_test: ContainerData, fragment: str):
 @pytest.mark.parametrize(
     "git_repo_url,expected_head",
     [
-        (f"{_LIBECONF_URL}{fragment}", commit)
+        (f"{_LIBECONF_URL}?trackingbranch=master{fragment}", commit)
         for fragment, commit in (
             ("", None),
             ("#master", None),
