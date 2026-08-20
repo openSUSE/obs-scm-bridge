@@ -195,6 +195,56 @@ def test_checks_out_project_without_submodules(
         )
 
 
+def test_checks_out_project_with_submodules(
+    auto_container_per_test: ContainerData,
+) -> None:
+    """Smoke test that we can clone a git repository that contains packages as
+    git submodules.
+
+    Additionally, we verify that the $pkg.xml and $pkg.info files are present
+    and their contents are sane.
+
+    """
+    dest = "/tmp/ring0"
+    repo = f"file://{_RPMS_DIR}ring0"
+    auto_container_per_test.connection.check_output(
+        f"{_OBS_SCM_BRIDGE_CMD} --outdir {dest} --url {repo} --projectmode 1",
+    )
+
+    libeconf_hash, aaa_base_hash = (
+        auto_container_per_test.connection.file(
+            f"/src/{pkg_name}"
+        ).content_string.strip()
+        for pkg_name in ("libeconf", "aaa_base")
+    )
+
+    for pkg_name, pkg_url, pkg_head_hash in (
+        ("libeconf", f"file://{_RPMS_DIR}libeconf", libeconf_hash),
+        ("aaa_base", _AAA_BASE_URL, aaa_base_hash),
+    ):
+        info_file = auto_container_per_test.connection.file(f"{dest}/{pkg_name}.info")
+        assert info_file.exists
+        assert info_file.content_string.strip() == pkg_head_hash
+
+        # the xml file should have essentially only the following contents:
+        # <package name="$pkg_name">
+        # <url>$project_url</url>
+        # <scmsync>$submodule_url#$revision</scmsync>
+        # </package>
+        pkg_meta = ET.fromstring(
+            auto_container_per_test.connection.file(
+                f"{dest}/{pkg_name}.xml"
+            ).content_string
+        )
+        assert pkg_meta.attrib["name"] == pkg_name
+        scm_sync = pkg_meta.findall("scmsync")
+        assert (
+            len(scm_sync) == 1
+            and scm_sync[0].text
+            and scm_sync[0].text == f"{pkg_url}#{pkg_head_hash}"
+        )
+
+
 LFS_REPO = "https://src.opensuse.org/pool/trivy.git"
 
 
