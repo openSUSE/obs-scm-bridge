@@ -8,6 +8,7 @@ all:
 install:
 	install -d $(DESTDIR)$(servicedir)
 	install -m 0755 obs_scm_bridge $(DESTDIR)$(servicedir)
+	cp -r scm_bridge $(DESTDIR)$(servicedir)/
 
 test:
 	flake8 set_version tests/

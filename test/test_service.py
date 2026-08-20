@@ -40,6 +40,7 @@ RUN set -euo pipefail; \
     git add libeconf aaa_base; git commit -m "initial commit";
 
 COPY obs_scm_bridge /usr/bin/
+COPY scm_bridge /usr/bin/scm_bridge/
 RUN sed -i 's,^#!/usr/bin/python3.*,#!/usr/bin/python3.13,' /usr/bin/obs_scm_bridge
 RUN chmod +x /usr/bin/obs_scm_bridge
 """
