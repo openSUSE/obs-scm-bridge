@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Project Manifest",
-  "description": "Schema for _manifest file in pbuild/OBS project git repositories",
-  "type": "object",
+  "description": "Schema for _manifest file in pbuild/OBS project git repositories. An empty file is allowed and simply identifies the git repository as package set.",
+  "type": ["object", "null"],
   "properties": {
     "packages": {
       "type": ["array", "null"],
