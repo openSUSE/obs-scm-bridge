@@ -362,7 +362,16 @@ class ObsGit(object):
         self.run_cmd(cmd, fatal="git clone", env=env)
         if reset_to_commit:
             cmd = [ 'git', '-C', outdir, 'reset', '--soft', reset_to_commit ]
-            self.run_cmd(cmd, fatal="git reset", env=env)
+            (returncode, output) = self.run_cmd_nonfatal(cmd, env=env)
+            if returncode != 0:
+                # could not reset to the commit, try to fetch it first
+                cmd = [ 'git', '-C', outdir, 'fetch', 'origin', reset_to_commit ]
+                if include_submodules:
+                    cmd += [ '--recurse-submodules' ]
+                self.run_cmd(cmd, fatal="git fetch")
+                # retry reset
+                cmd = [ 'git', '-C', outdir, 'reset', '--soft', reset_to_commit ]
+                self.run_cmd(cmd, fatal="git reset", env=env)
         if self.subdir:
             self.do_set_sparse_checkout(outdir)
         if self.subdir or reset_to_commit:
