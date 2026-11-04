@@ -22,12 +22,14 @@ import tempfile
 from html import escape
 from typing import Dict, List, Optional, TextIO, Tuple, Union
 import urllib.parse
+import yaml
 
 from scm_bridge.project import ProjectScanner
 
 download_assets = '/usr/lib/build/download_assets'
 critical_instances_config = "/etc/obs/services/scm-bridge/critical-instances"
 credentials_config = "/etc/obs/services/scm-bridge/credentials"
+evergit_config = os.environ.get("EVERGIT_CONFIG", "/etc/obs/services/scm-bridge/evergit.yaml")
 export_debian_orig_from_git = '/usr/lib/build/export_debian_orig_from_git'
 pack_directories = False
 follow_tracking_branch = False
@@ -168,6 +170,77 @@ class ObsGit(object):
     ) -> None:
         self.critical_git_servers.append(name)
 
+    def setup_evergit(
+            self,
+            conf_file: str
+    ) -> None:
+        try:
+            with open(conf_file, "r", encoding="utf-8") as f:
+                conf = yaml.safe_load(f)
+        except Exception as e:
+            logging.error("Failed to parse Evergit config %s: %s", conf_file, e)
+            return
+
+        if not conf or not isinstance(conf, dict):
+            return
+
+        targets = conf.get("targets")
+        if not targets or not isinstance(targets, list):
+            return
+
+        project = os.getenv("OBS_SERVICE_PROJECT")
+        package = os.getenv("OBS_SERVICE_PACKAGE")
+
+        matched = False
+        for target in targets:
+            target = str(target).strip()
+            if not target:
+                continue
+            if target == "*":
+                matched = True
+                break
+            if "/" in target:
+                target_proj, target_pkg = target.split("/", 1)
+                if project and project == target_proj:
+                    if target_pkg == "*" or (package and package == target_pkg):
+                        matched = True
+                        break
+            else:
+                if project and project == target:
+                    matched = True
+                    break
+
+        if not matched:
+            return
+
+        server_url = os.environ.get("EVERGIT_URL") or conf.get("url")
+        if not server_url:
+            self.die(f"no Evergit server configured in {conf_file} or EVERGIT_URL")
+
+        server_url = server_url.rstrip("/")
+
+        hosts = conf.get("hosts")
+        if not hosts:
+            raw_hosts = os.environ.get("EVERGIT_HOSTS")
+            if raw_hosts:
+                hosts = [h.strip() for h in re.split(r"[,\s]+", raw_hosts) if h.strip()]
+        if not hosts:
+            hosts = ["github.com", "gitlab.com", "bitbucket.org"]
+
+        logging.info("Routing through Evergit server %s for hosts: %s", server_url, ", ".join(hosts))
+        rules = []
+        for host in hosts:
+            rules.append(f"'url.{server_url}/{host}/.insteadOf=https://{host}/'")
+            rules.append(f"'url.{server_url}/{host}/.insteadOf=http://{host}/'")
+            rules.append(f"'url.{server_url}/{host}/.insteadOf=git@{host}:'")
+
+        git_params = " ".join(rules)
+        existing = os.environ.get("GIT_CONFIG_PARAMETERS", "")
+        if existing:
+            os.environ["GIT_CONFIG_PARAMETERS"] = f"{existing} {git_params}".strip()
+        else:
+            os.environ["GIT_CONFIG_PARAMETERS"] = git_params
+
     def setup_credentials(
             self,
             cred_file: str
@@ -210,6 +283,8 @@ class ObsGit(object):
         stderr = subprocess.PIPE
         if stdout == subprocess.PIPE:
             stderr = subprocess.STDOUT
+        if env is not None and "GIT_CONFIG_PARAMETERS" in os.environ and "GIT_CONFIG_PARAMETERS" not in env:
+            env["GIT_CONFIG_PARAMETERS"] = os.environ["GIT_CONFIG_PARAMETERS"]
         proc = subprocess.Popen(cmd,
                                 shell=False,
                                 stdout=stdout,
@@ -775,6 +850,8 @@ if __name__ == '__main__':
                 obsgit.add_critical_instance(line.rstrip())
     if os.path.isfile(credentials_config):
         obsgit.setup_credentials(credentials_config)
+    if os.path.isfile(evergit_config):
+        obsgit.setup_evergit(evergit_config)
 
     if project_mode == 'true' or project_mode == '1':
         obsgit.generate_project_files()

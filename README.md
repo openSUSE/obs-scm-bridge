@@ -111,6 +111,33 @@ These configuration files are optional and usually only used on OBS server side.
   PROJECT\_NAMESPACE is also valid for all sub projects. When using '*' it is
   valid for all projects.
 
+/etc/obs/services/scm-bridge/evergit.yaml
+  Optional YAML configuration to route git operations and submodules through an
+  Evergit proxy server for selected projects or packages.
+
+  Example configuration:
+
+  ```yaml
+  url: https://evergit.example.org
+
+  # Optional: list of upstream hosts to route through Evergit.
+  # Defaults to github.com, gitlab.com, bitbucket.org if omitted.
+  hosts:
+    - github.com
+    - gitlab.com
+    - bitbucket.org
+
+  # List of projects or packages that must use Evergit.
+  # Supports PROJECT, PROJECT/PACKAGE, PROJECT/*, or '*' for all.
+  targets:
+    - openSUSE:Factory
+    - devel:languages:python/requests
+  ```
+
+  When OBS runs the source service, it sets `OBS_SERVICE_PROJECT` and
+  `OBS_SERVICE_PACKAGE`. Evergit rewrite rules will only take effect if the
+  current project and/or package matches one of the targets in this file.
+
 
 TODO
 ====
