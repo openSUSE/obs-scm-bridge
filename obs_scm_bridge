@@ -466,7 +466,7 @@ class ObsGit(object):
             line = self.run_cmd(cmd, cwd=self.clonedir, fatal="git log")
             tstamp = line.rstrip()
         else:
-            cmd = [ 'git', 'log', '-n1', '--no-show-signature', '--pretty=format:%H %ct', '--end-of-options', self.subdir]
+            cmd = [ 'git', 'log', '-n1', '--no-show-signature', '--pretty=format:%H %ct', '--end-of-options', '--', self.subdir]
             line = self.run_cmd(cmd, cwd=self.clonedir, fatal="git log")
             commit, tstamp = line.split()
         self.tstamp = tstamp
@@ -628,7 +628,7 @@ class ObsGit(object):
             self.run_cmd(cmd, fatal="debian origtar export")
 
     def get_subdir_info(self, path: str) -> str:
-        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', '-d', 'HEAD', '--end-of-options', path ]
+        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', '-d', '--end-of-options', 'HEAD', path ]
         output = self.run_cmd(cmd, fatal="git ls-tree")
         for line in output.splitlines():
             lstree = line.split(maxsplit=4)
@@ -684,7 +684,7 @@ class ObsGit(object):
 
     def list_submodule_revisions(self, subdir: str) -> Dict[str, str]:
         revisions = {}
-        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', 'HEAD', '--end-of-options', (subdir + '/' if subdir else '.') ]
+        cmd = [ 'git', '-C', self.clonedir, 'ls-tree', '--end-of-options', 'HEAD', (subdir + '/' if subdir else '.') ]
         output = self.run_cmd(cmd, fatal="git ls-tree")
         for line in output.splitlines():
             lstree = line.split(maxsplit=4)
